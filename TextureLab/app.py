@@ -186,21 +186,6 @@ st.markdown("""
         font-weight: 600;
     }
 
-    /* Expanders */
-    .streamlit-expanderHeader {
-        font-weight: 600;
-        color: #e0e0ff;
-        background-color: rgba(30, 30, 46, 0.5);
-        border-radius: 8px;
-    }
-    .streamlit-expanderHeader:hover {
-        color: #8ec5fc;
-    }
-    /* Fix for cluttered SVG icons in expanders */
-    .streamlit-expanderHeader svg {
-        fill: currentColor;
-    }
-
     /* Info boxes */
     .stAlert { border-radius: 8px; }
 
@@ -392,19 +377,9 @@ def render_settings_panel():
             bp_method = st.selectbox("Filter method", ["fft", "iir"],
                                      key="s_bpm")
 
-        st.markdown("### 📊 Aggregation & Parameters")
+        st.markdown("### 📊 Aggregation Mode")
         agg_mode = st.selectbox("Aggregation Mode", ["mean", "median", "trimmed_mean"],
-                                key="s_agg")
-        
-        all_param_keys = [k for k in PARAM_REGISTRY.keys()]
-        default_params = ["MPD", "Ra", "Rq", "Rsk", "Rku", "Rk", "Sa", "Sq", "Sdr"]
-        selected_params = st.multiselect(
-            "Parameters to Calculate", 
-            all_param_keys, 
-            default=default_params,
-            key="s_params",
-            help="Select which parameters to include in the final analysis. Deselecting parameters you don't need cleans up the tables and graphs."
-        )
+                                key="s_agg", help="How to aggregate multiple profiles for 2D parameters.")
 
         # Recipe save/load
         st.markdown("### 💾 Save/Load Recipe (Batch settings)")
@@ -442,7 +417,7 @@ def render_settings_panel():
         bandpass=do_bp, bandpass_low=bp_low,
         bandpass_high=bp_high, bandpass_method=bp_method,
     )
-    return dx, dy, units_xy, units_z, direction, every_n, agg_mode, selected_params, cfg
+    return dx, dy, units_xy, units_z, direction, every_n, agg_mode, st.session_state["selected_params"], cfg
 
 
 # ===================================================================
@@ -476,7 +451,7 @@ def process_files(uploaded_files, dx, dy, units_xy, units_z,
                 grid.z, dx, dy, cfg, direction, every_n)
             
             # Store the FILTERED surface for visualization, not the raw one
-            grid.z = z_proc
+            grid.z = z_proc.copy()
             surfaces.append(grid)
             file_names.append(f.name)
 
@@ -1217,8 +1192,8 @@ def page_compare():
 
     st.markdown("---")
     
-    tab_pca, tab_psd, tab_abbott = st.tabs([
-        "🌌 PCA Comparison", "📈 Power Spectral Density (PSD)", "📉 Abbott-Firestone Curve"
+    tab_pca, tab_psd, tab_abbott, tab_3d = st.tabs([
+        "🌌 PCA Comparison", "📈 Power Spectral Density (PSD)", "📉 Abbott-Firestone Curve", "🧊 3D Surfaces Gallery"
     ])
     
     with tab_pca:
@@ -1324,6 +1299,32 @@ def page_compare():
         else:
             st.warning("No surface data available.")
 
+    with tab_3d:
+        st.markdown("### 🧊 3D Surfaces Gallery")
+        st.markdown("Compare the visual topography of all loaded surfaces side-by-side.")
+        
+        # Determine a reasonable grid size
+        n_surfaces = len(fnames)
+        cols_per_row = min(2, n_surfaces) # 2 columns max for good visibility
+        
+        for i in range(0, n_surfaces, cols_per_row):
+            cols = st.columns(cols_per_row)
+            for j in range(cols_per_row):
+                if i + j < n_surfaces:
+                    fn = fnames[i + j]
+                    grid_obj = [s for s, name in zip(st.session_state["surfaces"], fnames) if name == fn]
+                    if grid_obj:
+                        dx_val = st.session_state.get("s_dx", 1.0)
+                        dy_val = st.session_state.get("s_dy", 1.0)
+                        
+                        with cols[j]:
+                            st.markdown(f"**{fn}**")
+                            # Render 3D surface plot for each
+                            fig_3d = surface_3d(grid_obj[0].z, dx_val, dy_val, title="")
+                            # Adjust margins to fit better in small columns
+                            fig_3d.update_layout(margin=dict(l=0, r=0, t=0, b=0), height=400)
+                            st.plotly_chart(fig_3d, use_container_width=True)
+
 
 # ===================================================================
 # PAGE: Help
@@ -1362,10 +1363,16 @@ def page_help():
 
     st.markdown("---")
     st.markdown("### 📐 Complete Parameter Reference Table")
+    st.markdown("Use the checkboxes in the **Calculate** column to select which parameters should be computed and displayed in the app tables and graphs.")
 
+    # Build reference dataframe with a Calculate checkbox column
     ref_rows = []
+    current_selected = set(st.session_state.get("selected_params", []))
+    
     for name, meta in PARAM_REGISTRY.items():
         ref_rows.append({
+            "Calculate": name in current_selected,
+            "ID": name,
             "Parameter": meta.symbol,
             "Definition": meta.definition,
             "Dim": meta.dim,
@@ -1376,7 +1383,30 @@ def page_help():
             "Drainage": meta.drainage,
         })
     ref_df = pd.DataFrame(ref_rows)
-    st.dataframe(ref_df, use_container_width=True, height=800)
+    
+    # We use a callback or directly update from the returned dataframe
+    edited_df = st.data_editor(
+        ref_df,
+        column_config={
+            "Calculate": st.column_config.CheckboxColumn(
+                "Calculate",
+                help="Select to include this parameter in analysis",
+                default=True,
+            ),
+            "ID": None, # Hide internal ID column
+        },
+        disabled=["Parameter", "Definition", "Dim", "Standard", "Unit", "Noise", "Friction", "Drainage"],
+        hide_index=True,
+        use_container_width=True,
+        height=600,
+        key="param_table_editor"
+    )
+    
+    # Update session state based on user edits
+    if edited_df is not None:
+        new_selected = edited_df[edited_df["Calculate"] == True]["ID"].tolist()
+        if new_selected != st.session_state["selected_params"]:
+            st.session_state["selected_params"] = new_selected
 
     st.markdown("---")
     st.markdown("### Equations (LaTeX)")
