@@ -17,6 +17,7 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 
 # ── Add project root to path ──────────────────────────────────────────────
 ROOT = Path(__file__).resolve().parent
@@ -26,6 +27,7 @@ from src.data_io import load_surface, SurfaceGrid
 from src.preprocessing import PreprocessingConfig, preprocess_surface
 from src.descriptors import (
     compute_all, aggregate_profiles, PARAM_REGISTRY, compute_profile_params,
+    calc_psd_welch
 )
 from src.analytics import (
     prepare_feature_matrix, run_pca, run_kmeans, run_gmm, run_ward,
@@ -76,18 +78,20 @@ st.markdown("""
 
     /* Hero header */
     .hero-title {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
-        font-size: 2.2rem;
-        font-weight: 700;
+        font-size: 2.8rem;
+        font-weight: 800;
         margin-bottom: 0;
         line-height: 1.2;
+        letter-spacing: -0.02em;
     }
     .hero-sub {
-        color: #9ca3af;
-        font-size: 0.9rem;
+        color: #f3f4f6;
+        font-size: 1.1rem;
+        font-weight: 500;
         margin-top: -0.2rem;
     }
     .version-badge {
@@ -185,7 +189,16 @@ st.markdown("""
     /* Expanders */
     .streamlit-expanderHeader {
         font-weight: 600;
-        color: #667eea;
+        color: #e0e0ff;
+        background-color: rgba(30, 30, 46, 0.5);
+        border-radius: 8px;
+    }
+    .streamlit-expanderHeader:hover {
+        color: #8ec5fc;
+    }
+    /* Fix for cluttered SVG icons in expanders */
+    .streamlit-expanderHeader svg {
+        fill: currentColor;
     }
 
     /* Info boxes */
@@ -225,9 +238,10 @@ st.markdown("""
         color: #e0e0ff;
     }
     .welcome-desc {
-        color: #9ca3af;
-        font-size: 0.85rem;
-        margin-top: 0.3rem;
+        color: #d1d5db;
+        font-size: 0.9rem;
+        margin-top: 0.4rem;
+        line-height: 1.4;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -299,6 +313,15 @@ with st.sidebar:
         _set_page("license")
 
     st.markdown("---")
+    
+    if st.session_state.get("processed", False):
+        st.markdown("### 🧹 Data Management")
+        if st.button("🗑️ Clear all loaded data", use_container_width=True, type="secondary"):
+            _init_state()
+            _set_page("home")
+            st.rerun()
+            
+        st.markdown("---")
 
     # License footer
     st.markdown(f"""
@@ -369,12 +392,23 @@ def render_settings_panel():
             bp_method = st.selectbox("Filter method", ["fft", "iir"],
                                      key="s_bpm")
 
-        st.markdown("### 📊 Aggregation")
-        agg_mode = st.selectbox("Mode", ["mean", "median", "trimmed_mean"],
+        st.markdown("### 📊 Aggregation & Parameters")
+        agg_mode = st.selectbox("Aggregation Mode", ["mean", "median", "trimmed_mean"],
                                 key="s_agg")
+        
+        all_param_keys = [k for k in PARAM_REGISTRY.keys()]
+        default_params = ["MPD", "Ra", "Rq", "Rsk", "Rku", "Rk", "Sa", "Sq", "Sdr"]
+        selected_params = st.multiselect(
+            "Parameters to Calculate", 
+            all_param_keys, 
+            default=default_params,
+            key="s_params",
+            help="Select which parameters to include in the final analysis. Deselecting parameters you don't need cleans up the tables and graphs."
+        )
 
         # Recipe save/load
-        st.markdown("### 💾 Workflow Recipe")
+        st.markdown("### 💾 Save/Load Recipe (Batch settings)")
+        st.caption("Store your pre-processing and grid settings for reproducible batch analysis later.")
         col_s1, col_s2 = st.columns(2)
         with col_s1:
             recipe = {
@@ -408,14 +442,14 @@ def render_settings_panel():
         bandpass=do_bp, bandpass_low=bp_low,
         bandpass_high=bp_high, bandpass_method=bp_method,
     )
-    return dx, dy, units_xy, units_z, direction, every_n, agg_mode, cfg
+    return dx, dy, units_xy, units_z, direction, every_n, agg_mode, selected_params, cfg
 
 
 # ===================================================================
 # File processing function
 # ===================================================================
 def process_files(uploaded_files, dx, dy, units_xy, units_z,
-                  direction, every_n, agg_mode, cfg):
+                  direction, every_n, agg_mode, selected_params, cfg):
     """Process uploaded file(s) and store results in session state."""
     all_warnings: list = []
     batch_agg: list = []
@@ -453,6 +487,24 @@ def process_files(uploaded_files, dx, dy, units_xy, units_z,
 
             per_profile, areal = compute_all(profiles, z_proc, dx, dy)
             agg = aggregate_profiles(per_profile, agg_mode)
+            
+            # Filter results by user selection
+            if selected_params:
+                # Need to keep std/P10/P90 derived metrics if the base metric was selected
+                filtered_agg = {}
+                for k in list(agg.keys()):
+                    base_k = k.replace("_std", "").replace("_P10", "").replace("_P90", "")
+                    if base_k in selected_params:
+                        filtered_agg[k] = agg[k]
+                agg = filtered_agg
+                
+                areal = {k: v for k, v in areal.items() if k in selected_params}
+                
+                # Filter per-profile data for data science/viz tabs
+                filtered_profiles = []
+                for res in per_profile:
+                    filtered_profiles.append({k: v for k, v in res.items() if k in selected_params})
+                per_profile = filtered_profiles
 
             st.session_state["profiles"][f.name] = profiles
             st.session_state["results_1d"][f.name] = per_profile
@@ -983,7 +1035,7 @@ def page_new():
     st.markdown("## 📄 New Analysis")
     st.markdown("Upload a single surface file for comprehensive texture analysis.")
 
-    dx, dy, units_xy, units_z, direction, every_n, agg_mode, cfg = render_settings_panel()
+    dx, dy, units_xy, units_z, direction, every_n, agg_mode, selected_params, cfg = render_settings_panel()
 
     uploaded = st.file_uploader(
         "Upload surface file (CSV / LAZ / LAS)",
@@ -993,7 +1045,7 @@ def page_new():
 
     if uploaded and st.button("🚀  Run Analysis", use_container_width=True):
         process_files([uploaded], dx, dy, units_xy, units_z,
-                      direction, every_n, agg_mode, cfg)
+                      direction, every_n, agg_mode, selected_params, cfg)
 
     if st.session_state["processed"]:
         tab_s, tab_t, tab_v, tab_d, tab_l = st.tabs(
@@ -1017,7 +1069,7 @@ def page_open():
     st.markdown("## 📂 Open Existing File")
     st.markdown("Enter the path to an existing surface file on your system.")
 
-    dx, dy, units_xy, units_z, direction, every_n, agg_mode, cfg = render_settings_panel()
+    dx, dy, units_xy, units_z, direction, every_n, agg_mode, selected_params, cfg = render_settings_panel()
 
     file_path = st.text_input("File path",
                               placeholder=r"C:\data\surface_scan.csv",
@@ -1042,6 +1094,22 @@ def page_open():
 
                 per_profile, areal = compute_all(profiles, z_proc, dx, dy)
                 agg = aggregate_profiles(per_profile, agg_mode)
+
+                # Filter results by user selection
+                if selected_params:
+                    filtered_agg = {}
+                    for k in list(agg.keys()):
+                        base_k = k.replace("_std", "").replace("_P10", "").replace("_P90", "")
+                        if base_k in selected_params:
+                            filtered_agg[k] = agg[k]
+                    agg = filtered_agg
+                    
+                    areal = {k: v for k, v in areal.items() if k in selected_params}
+                    
+                    filtered_profiles = []
+                    for res in per_profile:
+                        filtered_profiles.append({k: v for k, v in res.items() if k in selected_params})
+                    per_profile = filtered_profiles
 
                 fname = path.name
                 st.session_state["surfaces"] = [grid]
@@ -1081,7 +1149,7 @@ def page_batch():
     st.markdown("## 📦 Batch Analysis")
     st.markdown("Upload multiple surface files to process and compare in batch.")
 
-    dx, dy, units_xy, units_z, direction, every_n, agg_mode, cfg = render_settings_panel()
+    dx, dy, units_xy, units_z, direction, every_n, agg_mode, selected_params, cfg = render_settings_panel()
 
     uploaded = st.file_uploader(
         "Upload surface files (CSV / LAZ / LAS)",
@@ -1092,7 +1160,7 @@ def page_batch():
     if uploaded and len(uploaded) >= 1 and st.button("🚀  Run Batch Analysis",
                                                       use_container_width=True):
         process_files(uploaded, dx, dy, units_xy, units_z,
-                      direction, every_n, agg_mode, cfg)
+                      direction, every_n, agg_mode, selected_params, cfg)
 
     if st.session_state["processed"]:
         tab_s, tab_t, tab_v, tab_d, tab_l = st.tabs(
@@ -1146,6 +1214,115 @@ def page_compare():
                          template="plotly_dark",
                          labels={"x": "File", "y": param})
             st.plotly_chart(fig, use_container_width=True)
+
+    st.markdown("---")
+    
+    tab_pca, tab_psd, tab_abbott = st.tabs([
+        "🌌 PCA Comparison", "📈 Power Spectral Density (PSD)", "📉 Abbott-Firestone Curve"
+    ])
+    
+    with tab_pca:
+        st.markdown("### Principal Component Analysis (Batch)")
+        st.markdown("Automatically clusters the analysed files in 2D space based on their parameters to find similar surfaces.")
+        
+        batch_tbl = build_batch_table(st.session_state["batch_agg"], fnames)
+        num_cols = batch_tbl.select_dtypes(include="number").columns.tolist()
+        pca_feats = st.multiselect("Features for PCA", num_cols,
+                                   default=[c for c in num_cols if c in 
+                                            ["MPD", "Ra", "Rq", "Rsk", "Rku", "Rk", "Sa", "Sdr", "MeanSlope"]], 
+                                   key="comp_pca_feats")
+        
+        if pca_feats and len(pca_feats) >= 2 and len(fnames) >= 2:
+            try:
+                pca_res = run_pca(batch_tbl, pca_feats, n_components=2)
+                df_pca = pd.DataFrame(pca_res["scores"][:, :2], columns=["PC1", "PC2"])
+                df_pca["File"] = fnames
+                
+                fig = px.scatter(df_pca, x="PC1", y="PC2", color="File", text="File",
+                                 title="Surfaces in PCA space",
+                                 template="plotly_dark", size_max=15)
+                fig.update_traces(textposition='top center', marker=dict(size=12))
+                st.plotly_chart(fig, use_container_width=True)
+                
+                st.caption(f"**Variance explained:** PC1: {pca_res['explained_variance_ratio'][0]:.1%} | PC2: {pca_res['explained_variance_ratio'][1]:.1%}")
+            except Exception as e:
+                st.warning(f"Could not run PCA: {e}")
+                
+    with tab_psd:
+        st.markdown("### PSD Comparison")
+        st.markdown("Compares the wavelength distribution of the surfaces. Data is averaged over all extracted profiles per file.")
+        
+        dx = st.session_state.get("s_dx", 1.0)
+        
+        fig = go.Figure()
+        for fn in fnames:
+            profs = st.session_state["profiles"].get(fn, [])
+            if profs:
+                # Calculate mean PSD across all profiles
+                psds = []
+                freqs = None
+                for p in profs:
+                    f, psd = calc_psd_welch(p, dx)
+                    freqs = f
+                    psds.append(psd)
+                
+                if freqs is not None and len(psds) > 0:
+                    mean_psd = np.mean(psds, axis=0)
+                    mask = freqs > 0
+                    fig.add_trace(go.Scatter(
+                        x=1.0 / freqs[mask],  # Wavelength = 1 / spatial frequency
+                        y=10 * np.log10(mean_psd[mask]),
+                        mode='lines',
+                        name=fn
+                    ))
+                    
+        if len(fig.data) > 0:
+            fig.update_layout(
+                template="plotly_dark",
+                xaxis_title="Wavelength λ (mm)",
+                yaxis_title="Power Spectral Density (dB re 1 mm³)",
+                xaxis_type="log",
+                hovermode="x unified"
+            )
+            # Reverse X axis so larger wavelengths are on the right/left depending on convention
+            # ISO convention usually has larger wavelengths on the left or logs. We'll leave it ascending.
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("No profile data available for PSD.")
+            
+    with tab_abbott:
+        st.markdown("### Abbott-Firestone Curve (Bearing Area)")
+        st.markdown("Shows the cumulative height distribution (Material Ratio) of the surfaces.")
+        
+        fig = go.Figure()
+        for fn in fnames:
+            grid_obj = [s for s, name in zip(st.session_state["surfaces"], fnames) if name == fn]
+            if grid_obj:
+                z = grid_obj[0].z
+                z_valid = z[np.isfinite(z)]
+                if len(z_valid) > 0:
+                    z_sorted = np.sort(z_valid)[::-1]
+                    # Subsample for plot performance
+                    step = max(1, len(z_sorted) // 1000)
+                    z_sub = z_sorted[::step]
+                    mr = np.linspace(0, 100, len(z_sub))
+                    
+                    fig.add_trace(go.Scatter(
+                        x=mr, y=z_sub,
+                        mode='lines',
+                        name=fn
+                    ))
+                    
+        if len(fig.data) > 0:
+            fig.update_layout(
+                template="plotly_dark",
+                xaxis_title="Material Ratio (%)",
+                yaxis_title="Height",
+                hovermode="x unified"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("No surface data available.")
 
 
 # ===================================================================

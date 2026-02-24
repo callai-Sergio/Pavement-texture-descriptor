@@ -73,18 +73,30 @@ def build_results_table(aggregated: dict, areal: dict,
 
 def build_batch_table(batch_results: List[dict],
                       file_names: List[str],
-                      key_params: Optional[List[str]] = None
+                      key_params: Optional[List[str]] = None,
+                      areal_results: Optional[List[dict]] = None
                       ) -> pd.DataFrame:
-    """Build batch comparison table (rows = files, cols = key params)."""
-    if key_params is None:
-        key_params = ["MPD", "Ra", "Rq", "Rsk", "Rku", "Rk", "Rpk", "Rvk",
-                      "Sa", "Sq", "Sdr", "MeanSlope", "PeakDensity"]
+    """Build batch comparison table (rows = files, cols = params)."""
+    
     rows = []
-    for fname, res in zip(file_names, batch_results):
+    for i, (fname, res) in enumerate(zip(file_names, batch_results)):
         row = {"File": fname}
-        for k in key_params:
-            row[k] = res.get(k, None)
+        
+        # Merge areal results if provided
+        areal = areal_results[i] if areal_results and i < len(areal_results) else {}
+        combined = {**res, **areal}
+        
+        if key_params is None:
+            # If no specific keys requested, use all of them except the metadata ones (like _std)
+            for k, v in combined.items():
+                if not k.endswith(('_std', '_P10', '_P90')):
+                    row[k] = v
+        else:
+            for k in key_params:
+                row[k] = combined.get(k, None)
+                
         rows.append(row)
+        
     return pd.DataFrame(rows)
 
 
