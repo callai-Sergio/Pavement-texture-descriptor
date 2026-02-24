@@ -437,11 +437,15 @@ def process_files(uploaded_files, dx, dy, units_xy, units_z,
             grid = load_surface(tmp.name, dx, dy,
                                 units_xy=units_xy, units_z=units_z)
             _log(f"  Grid size: {grid.ny}×{grid.nx}")
+            
+            z_proc, profiles, warns = preprocess_surface(
+                grid.z, dx, dy, cfg, direction, every_n)
+            
+            # Store the FILTERED surface for visualization, not the raw one
+            grid.z = z_proc
             surfaces.append(grid)
             file_names.append(f.name)
 
-            z_proc, profiles, warns = preprocess_surface(
-                grid.z, dx, dy, cfg, direction, every_n)
             all_warnings.extend(warns)
             for w in warns:
                 _log(f"  ⚠ {w}")
@@ -569,7 +573,7 @@ def render_summary():
                 pd.DataFrame(summary_rows),
                 use_container_width=True,
                 hide_index=True,
-                height=min(450, 35 * 10 + 38),  # ~10 rows visible
+                height=min(450, 35 * 6 + 38),  # ~5 rows visible (6 = header + 5 rows)
             )
 
             # Surface views (2D heatmap + 3D)
@@ -614,7 +618,7 @@ def render_table(dx, dy, agg_mode, cfg):
     tbl = build_results_table(agg, areal, notes)
 
     st.markdown("### Full Parameter Table")
-    st.dataframe(tbl, use_container_width=True, height=min(600, 35 * 10 + 38))
+    st.dataframe(tbl, use_container_width=True, height=min(600, 35 * 6 + 38))  # ~5 rows
 
     st.markdown("### Export")
     col_e1, col_e2, col_e3 = st.columns(3)
