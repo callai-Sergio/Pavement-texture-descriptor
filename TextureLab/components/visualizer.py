@@ -39,7 +39,8 @@ def boxplot(df: pd.DataFrame, col: str,
 
 def heatmap_2d(z: np.ndarray, dx: float, dy: float,
                title: str = "Surface height map",
-               units_z: str = "units") -> go.Figure:
+               units_z: str = "units",
+               robust_color: bool = True) -> go.Figure:
     ny, nx = z.shape
     x_coords = np.arange(nx) * dx
     y_coords = np.arange(ny) * dy
@@ -47,14 +48,24 @@ def heatmap_2d(z: np.ndarray, dx: float, dy: float,
     y_range = y_coords[-1] - y_coords[0] if ny > 1 else 1.0
     aspect = y_range / x_range if x_range > 0 else 1.0
 
+    # Robust color scale: clamp to P1–P99
+    valid = z[np.isfinite(z)]
+    if robust_color and len(valid) > 0:
+        cmin = float(np.percentile(valid, 1))
+        cmax = float(np.percentile(valid, 99))
+    elif len(valid) > 0:
+        cmin, cmax = float(valid.min()), float(valid.max())
+    else:
+        cmin, cmax = 0, 1
+
     fig = go.Figure(data=go.Heatmap(
         z=z,
         x=x_coords,
         y=y_coords,
         colorscale="Viridis",
+        zmin=cmin, zmax=cmax,
         colorbar=dict(title=f"Height ({units_z})", thickness=15),
     ))
-    # Auto-height based on actual aspect ratio, capped at reasonable size
     plot_width = 700
     plot_height = max(300, min(800, int(plot_width * aspect)))
     fig.update_layout(
@@ -68,27 +79,63 @@ def heatmap_2d(z: np.ndarray, dx: float, dy: float,
 def surface_3d(z: np.ndarray, dx: float, dy: float,
                title: str = "3D Surface",
                max_pts: int = 300,
-               units_z: str = "units") -> go.Figure:
-    """Interactive 3D surface mesh (downsampled for performance)."""
+               units_z: str = "units",
+               vert_exag: float = 0.3,
+               robust_color: bool = True) -> go.Figure:
+    """Interactive 3D surface mesh (downsampled via block averaging).
+
+    Parameters
+    ----------
+    vert_exag : float
+        Vertical exaggeration for rendering only. Default 0.3 flattens
+        spikes visually while the colorbar still shows real height values.
+    robust_color : bool
+        Clamp colorbar to P1-P99 percentiles so outlier spikes/pits
+        don't stretch the colour map.
+    """
     ny, nx = z.shape
-    # Downsample if grid is too large for smooth interaction
     step_x = max(1, nx // max_pts)
     step_y = max(1, ny // max_pts)
-    z_ds = z[::step_y, ::step_x]
+
+    # Block-average downsample (anti-alias), never stride
+    if step_x > 1 or step_y > 1:
+        ny_trim = (ny // step_y) * step_y
+        nx_trim = (nx // step_x) * step_x
+        z_trim = z[:ny_trim, :nx_trim]
+        z_ds = np.nanmean(
+            z_trim.reshape(ny_trim // step_y, step_y,
+                           nx_trim // step_x, step_x),
+            axis=(1, 3))
+    else:
+        z_ds = z.copy()
+
     ny_ds, nx_ds = z_ds.shape
     x_coords = np.arange(nx_ds) * dx * step_x
     y_coords = np.arange(ny_ds) * dy * step_y
 
+    # Robust color scale: P1-P99
+    valid = z_ds[np.isfinite(z_ds)]
+    if robust_color and len(valid) > 0:
+        cmin = float(np.percentile(valid, 1))
+        cmax = float(np.percentile(valid, 99))
+    elif len(valid) > 0:
+        cmin, cmax = float(valid.min()), float(valid.max())
+    else:
+        cmin, cmax = 0, 1
+
+    # Vertical exaggeration for rendering only
+    z_render = z_ds * vert_exag
+
     fig = go.Figure(data=[go.Surface(
-        z=z_ds, x=x_coords, y=y_coords,
+        z=z_render, x=x_coords, y=y_coords,
+        surfacecolor=z_ds,           # colour from REAL z values
         colorscale="Viridis",
+        cmin=cmin, cmax=cmax,
         colorbar=dict(title=f"Height ({units_z})", thickness=12, len=0.6),
-        contours=dict(
-            z=dict(show=True, usecolormap=True, highlightcolor="white",
-                   project_z=True),
-        ),
-        lighting=dict(ambient=0.5, diffuse=0.6, specular=0.3,
-                      roughness=0.5, fresnel=0.2),
+        contours=dict(z=dict(show=False)),
+        lighting=dict(ambient=0.6, diffuse=0.7, specular=0.2,
+                      roughness=0.7, fresnel=0.1),
+        lightposition=dict(x=0, y=0, z=10000),
     )])
     fig.update_layout(
         title=title, template="plotly_dark",
@@ -96,13 +143,13 @@ def surface_3d(z: np.ndarray, dx: float, dy: float,
         scene=dict(
             xaxis_title="X",
             yaxis_title="Y",
-            zaxis_title=f"Height ({units_z})",
+            zaxis_title=f"Height ({units_z}) ×{vert_exag}",
             camera=dict(eye=dict(x=1.5, y=1.5, z=0.8)),
             aspectmode="manual",
             aspectratio=dict(
                 x=1.0,
                 y=ny_ds / nx_ds if nx_ds > 0 else 1.0,
-                z=0.35,
+                z=0.25,
             ),
         ),
         margin=dict(l=10, r=10, t=40, b=10),

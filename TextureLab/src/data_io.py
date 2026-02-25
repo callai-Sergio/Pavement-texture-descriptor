@@ -173,7 +173,7 @@ def load_surface(path: str, dx: float, dy: float, **kw) -> SurfaceGrid:
     ext = pathlib.Path(path).suffix.lower()
     if ext in (".laz", ".las"):
         return read_laz(path, dx, dy, **kw)
-    elif ext == ".csv":
+    elif ext in (".csv", ".txt"):
         return read_csv(path, dx, dy, **kw)
     else:
         raise ValueError(f"Unsupported file type: {ext}")

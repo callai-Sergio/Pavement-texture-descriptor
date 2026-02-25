@@ -48,7 +48,7 @@ from components.export_manager import (
 # ===================================================================
 # Constants
 # ===================================================================
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 APP_AUTHOR = "Sergio Callai"
 APP_YEAR = "2025"
 
@@ -229,10 +229,14 @@ st.markdown("""
         line-height: 1.4;
     }
 
-    /* File uploader list expansion to show more files per page */
+    /* File uploader list – show 5 items per page */
     div[data-testid="stFileUploader"] ul {
-        max-height: 350px !important;
+        max-height: 500px !important;
         overflow-y: auto;
+    }
+    div[data-testid="stFileUploader"] ul li {
+        padding: 0.15rem 0 !important;
+        font-size: 0.8rem;
     }
 
     /* Compact expander headers so long filenames don't clutter */
@@ -410,6 +414,16 @@ def render_settings_panel():
         agg_mode = st.selectbox("Aggregation Mode", ["mean", "median", "trimmed_mean"],
                                 key="s_agg", help="How to aggregate multiple profiles for 2D parameters.")
 
+        st.markdown("### 🎨 Rendering")
+        vert_exag = st.slider(
+            "Vertical exaggeration", 0.1, 3.0, 0.3, 0.1,
+            key="s_vexag",
+            help="Scale Z for visualization only. Lower = flatter (less spiky). Does NOT affect metrics.")
+        robust_color = st.checkbox(
+            "Robust colour scale (P1–P99)", value=True,
+            key="s_robcol",
+            help="Clamp colours to 1st–99th percentile so outlier pits/spikes don't wash out the colormap.")
+
         # Recipe save/load
         st.markdown("### 💾 Save/Load Recipe (Batch settings)")
         st.caption("Store your pre-processing and grid settings for reproducible batch analysis later.")
@@ -446,7 +460,7 @@ def render_settings_panel():
         bandpass=do_bp, bandpass_low=bp_low,
         bandpass_high=bp_high, bandpass_method=bp_method,
     )
-    return dx, dy, units_xy, units_z, direction, every_n, agg_mode, st.session_state["selected_params"], cfg
+    return dx, dy, units_xy, units_z, direction, every_n, agg_mode, st.session_state["selected_params"], cfg, vert_exag, robust_color
 
 
 # ===================================================================
@@ -638,6 +652,9 @@ def render_summary():
             if grid_obj:
                 dx_val = st.session_state.get("s_dx", 1.0)
                 dy_val = st.session_state.get("s_dy", 1.0)
+                _uz = st.session_state.get("s_uz", "units")
+                _ve = st.session_state.get("s_vexag", 0.3)
+                _rc = st.session_state.get("s_robcol", True)
                 view_mode = st.radio(
                     "Surface view", ["2D heatmap", "3D surface"],
                     horizontal=True, key=f"view_{fname}")
@@ -646,16 +663,17 @@ def render_summary():
                     st.plotly_chart(
                         heatmap_2d(grid_obj[0].z, dx_val, dy_val,
                                    title=f"Surface – {fname}",
-                                   units_z=st.session_state.get("s_uz", "units")),
+                                   units_z=_uz, robust_color=_rc),
                         use_container_width=True)
                 else:
                     st.caption(
-                        "Interactive 3D view of the filtered surface. "
-                        "Drag to rotate, scroll to zoom. Downsampled for performance.")
+                        f"Interactive 3D view. Vertical exaggeration ×{_ve} (render only). "
+                        "Drag to rotate, scroll to zoom.")
                     st.plotly_chart(
                         surface_3d(grid_obj[0].z, dx_val, dy_val,
                                    title=f"3D Surface – {fname}",
-                                   units_z=st.session_state.get("s_uz", "units")),
+                                   units_z=_uz, vert_exag=_ve,
+                                   robust_color=_rc),
                         use_container_width=True)
 
     if st.session_state["warnings"]:
@@ -802,38 +820,54 @@ def render_visualization():
 def render_data_science():
     """Data Science tab with PCA, Clustering, Regression, Anomaly, Features."""
     fnames = st.session_state["file_names"]
-    
-    scope = "Per Profile (All data)"
-    if len(fnames) >= 2:
-        st.markdown("### Data Scope")
-        scope = st.radio("Analysis Basis", ["Per Surface (File average)", "Per Profile (All data)"], horizontal=True)
-    
+
+    # ── Sample selector ──
+    st.markdown("### Sample Selection")
+    selected_samples = st.multiselect(
+        "Samples to include", fnames, default=fnames, key="ds_samples")
+    if not selected_samples:
+        st.warning("Select at least one sample.")
+        return
+
+    # ── Scope ──
+    scope_options = ["Per Profile (All data)"]
+    if len(selected_samples) >= 2:
+        scope_options = ["Per Surface (File average)", "Per Profile (All data)", "Per Sample (Single file)"]
+    else:
+        scope_options = ["Per Profile (All data)", "Per Sample (Single file)"]
+
+    scope = st.radio("Analysis Basis", scope_options, horizontal=True, key="ds_scope")
+
     all_rows = []
     if scope == "Per Surface (File average)":
-        for fn in fnames:
+        for fn in selected_samples:
             agg = dict(st.session_state["aggregated"].get(fn, {}))
             agg["_file"] = fn
             all_rows.append(agg)
-    else:
-        for fn in fnames:
+    elif scope == "Per Sample (Single file)":
+        sample_choice = st.selectbox("Select sample", selected_samples, key="ds_sample_choice")
+        for row in st.session_state["results_1d"].get(sample_choice, []):
+            r = dict(row)
+            r["_file"] = sample_choice
+            all_rows.append(r)
+    else:  # Per Profile (All data)
+        for fn in selected_samples:
             for row in st.session_state["results_1d"].get(fn, []):
                 r = dict(row)
                 r["_file"] = fn
                 all_rows.append(r)
-                
+
     if not all_rows:
-        st.warning("No data available.")
+        st.warning("No data available for selected samples.")
         return
 
     df_all = pd.DataFrame(all_rows)
     num_cols = sorted(df_all.select_dtypes(include="number").columns.tolist())
 
-    if len(fnames) < 2:
+    if len(selected_samples) < 2:
         st.info(
-            "💡 **Single surface loaded.** The analyses below use per-profile data "
-            "from within this surface. For between-surface comparisons (e.g. comparing "
-            "different pavement types or wear states), use **Batch Analysis** to load "
-            "multiple files first."
+            "💡 **Single sample selected.** Analyses use per-profile data within this surface. "
+            "Select multiple samples or use **Batch Analysis** for between-surface comparisons."
         )
 
     ds_tab1, ds_tab2, ds_tab3, ds_tab4, ds_tab5 = st.tabs(
@@ -1055,7 +1089,7 @@ def page_new():
     st.markdown("## 📄 New Analysis")
     st.markdown("Upload a single surface file for comprehensive texture analysis.")
 
-    dx, dy, units_xy, units_z, direction, every_n, agg_mode, selected_params, cfg = render_settings_panel()
+    dx, dy, units_xy, units_z, direction, every_n, agg_mode, selected_params, cfg, vert_exag, robust_color = render_settings_panel()
 
     uploaded = st.file_uploader(
         "Upload surface file (CSV / TXT / LAZ / LAS)",
@@ -1090,7 +1124,7 @@ def page_open():
     st.markdown("## 📂 Open Existing File")
     st.markdown("Enter the path to an existing surface file on your system.")
 
-    dx, dy, units_xy, units_z, direction, every_n, agg_mode, selected_params, cfg = render_settings_panel()
+    dx, dy, units_xy, units_z, direction, every_n, agg_mode, selected_params, cfg, vert_exag, robust_color = render_settings_panel()
 
     file_path = st.text_input("File path",
                               placeholder=r"C:\data\surface_scan.csv",
@@ -1170,7 +1204,7 @@ def page_batch():
     st.markdown("## 📦 Batch Analysis")
     st.markdown("Upload multiple surface files to process and compare in batch.")
 
-    dx, dy, units_xy, units_z, direction, every_n, agg_mode, selected_params, cfg = render_settings_panel()
+    dx, dy, units_xy, units_z, direction, every_n, agg_mode, selected_params, cfg, vert_exag, robust_color = render_settings_panel()
 
     uploaded = st.file_uploader(
         "Upload surface files (CSV / TXT / LAZ / LAS)",
@@ -1366,9 +1400,11 @@ def page_compare():
                         
                         with cols[j]:
                             st.markdown(f"**{fn}**")
-                            # Render 3D surface plot for each
-                            fig_3d = surface_3d(grid_obj[0].z, dx_val, dy_val, title="", units_z=st.session_state.get("s_uz", "units"))
-                            # Adjust margins to fit better in small columns
+                            _ve = st.session_state.get("s_vexag", 0.3)
+                            _rc = st.session_state.get("s_robcol", True)
+                            _uz = st.session_state.get("s_uz", "units")
+                            fig_3d = surface_3d(grid_obj[0].z, dx_val, dy_val, title="",
+                                                units_z=_uz, vert_exag=_ve, robust_color=_rc)
                             fig_3d.update_layout(margin=dict(l=0, r=0, t=0, b=0), height=400)
                             st.plotly_chart(fig_3d, use_container_width=True)
 

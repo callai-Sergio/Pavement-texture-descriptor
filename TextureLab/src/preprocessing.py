@@ -1,8 +1,9 @@
 """
 preprocessing.py – Surface pre-processing pipeline for TextureLab
 
-Includes: plane removal, outlier filtering, gap interpolation,
-detrending, and FFT band-pass filtering.
+Includes: plane removal, outlier filtering (mm-based Hampel),
+gap interpolation, detrending, FFT band-pass filtering,
+and block-average downsampling.
 """
 from __future__ import annotations
 
@@ -25,8 +26,8 @@ class PreprocessingConfig:
 
     # Outlier
     outlier_method: str = "none"         # none | hampel | median
-    outlier_window: int = 7
-    outlier_threshold: float = 3.0
+    outlier_window: int = 7              # in samples (fallback)
+    outlier_threshold: float = 3.5
 
     # Missing values
     interp_missing: bool = True
@@ -83,20 +84,31 @@ def remove_polynomial(z: np.ndarray, dx: float, dy: float,
 
 
 # ---------------------------------------------------------------------------
-# Outlier filtering
+# Outlier filtering – Hampel with mm-based window
 # ---------------------------------------------------------------------------
 def hampel_filter_1d(profile: np.ndarray, win: int = 7,
-                     threshold: float = 3.0) -> np.ndarray:
-    """Hampel identifier – replace outliers with local median."""
+                     threshold: float = 3.5) -> np.ndarray:
+    """Hampel identifier – replace outliers with local median.
+
+    Parameters
+    ----------
+    win : int
+        Number of samples on each side (total 2*win+1).
+    threshold : float
+        Number of robust sigma for outlier classification (K factor).
+    """
     n = len(profile)
     out = profile.copy()
-    half = win // 2
-    for i in range(half, n - half):
-        window = profile[i - half:i + half + 1]
-        med = np.nanmedian(window)
-        mad = 1.4826 * np.nanmedian(np.abs(window - med))
-        if mad > 0 and np.abs(profile[i] - med) / mad > threshold:
-            out[i] = med
+    for i in range(win, n - win):
+        window = profile[i - win:i + win + 1]
+        valid = window[np.isfinite(window)]
+        if len(valid) < 3:
+            continue
+        med = np.nanmedian(valid)
+        mad = 1.4826 * np.nanmedian(np.abs(valid - med))
+        if mad > 0 and np.isfinite(profile[i]):
+            if np.abs(profile[i] - med) > threshold * mad:
+                out[i] = med
     return out
 
 
@@ -106,7 +118,7 @@ def median_filter_1d(profile: np.ndarray, size: int = 5) -> np.ndarray:
 
 def filter_outliers_profile(profile: np.ndarray, method: str,
                             window: int = 7,
-                            threshold: float = 3.0) -> np.ndarray:
+                            threshold: float = 3.5) -> np.ndarray:
     if method == "hampel":
         return hampel_filter_1d(profile, window, threshold)
     elif method == "median":
@@ -184,6 +196,43 @@ def iir_bandpass(profile: np.ndarray, dx: float,
 
 
 # ---------------------------------------------------------------------------
+# Block-average downsampling
+# ---------------------------------------------------------------------------
+def block_average_resample(z: np.ndarray, dx_native: float, dy_native: float,
+                           dx_target: float, dy_target: float,
+                           min_valid_frac: float = 0.9) -> Tuple[np.ndarray, dict]:
+    """Downsample a grid by block averaging (anti-alias).
+
+    Returns the downsampled grid and a log dict.
+    """
+    rx = max(1, round(dx_target / dx_native))
+    ry = max(1, round(dy_target / dy_native))
+
+    ny, nx = z.shape
+    ny_trim = (ny // ry) * ry
+    nx_trim = (nx // rx) * rx
+
+    z_trim = z[:ny_trim, :nx_trim]
+    blocks = z_trim.reshape(ny_trim // ry, ry, nx_trim // rx, rx)
+
+    valid_count = np.sum(np.isfinite(blocks), axis=(1, 3))
+    total_count = ry * rx
+    z_ds = np.nanmean(blocks, axis=(1, 3))
+
+    # Mark blocks with too few valid points as NaN
+    invalid_mask = valid_count < (min_valid_frac * total_count)
+    z_ds[invalid_mask] = np.nan
+
+    log = {
+        "rx": rx, "ry": ry,
+        "input_shape": z.shape,
+        "output_shape": z_ds.shape,
+        "invalid_blocks": int(invalid_mask.sum()),
+    }
+    return z_ds, log
+
+
+# ---------------------------------------------------------------------------
 # Profile extraction
 # ---------------------------------------------------------------------------
 def extract_profiles(z: np.ndarray, direction: str = "longitudinal",
@@ -224,53 +273,56 @@ def preprocess_surface(z: np.ndarray, dx: float, dy: float,
         z_out = remove_polynomial(z_out, dx, dy, cfg.poly_order)
 
     # 2) Clean full surface grid in BOTH directions (rows then columns)
-    #    This catches spikes regardless of their orientation.
+    #    Convert window from samples to mm-based half-window:
+    #    w_pts = odd(round(window_mm / dx)) where window_mm ~ outlier_window * dx
+    #    The outlier_window from the UI is in samples, so we convert to half-window.
 
-    def _clean_direction(z_arr, n_lines, get_line, set_line, step_dx, cb_offset=0.0, cb_scale=0.5):
-        for i in range(n_lines):
-            p = get_line(z_arr, i)
+    def _clean_1d(p, step_dx):
+        """Apply the full per-profile cleaning chain."""
+        missing_frac = np.isnan(p).sum() / len(p)
+        if missing_frac > cfg.max_missing_fraction:
+            return p, False  # skip this line
 
-            missing_frac = np.isnan(p).sum() / len(p)
-            if missing_frac > cfg.max_missing_fraction:
-                continue
+        if cfg.interp_missing:
+            p = interpolate_gaps(p)
 
-            if cfg.interp_missing:
-                p = interpolate_gaps(p)
+        if cfg.outlier_method != "none":
+            # Convert window to half-window for Hampel
+            half_win = cfg.outlier_window // 2
+            half_win = max(1, half_win)
+            p = filter_outliers_profile(
+                p, cfg.outlier_method,
+                half_win, cfg.outlier_threshold)
 
-            if cfg.outlier_method != "none":
-                p = filter_outliers_profile(
-                    p, cfg.outlier_method,
-                    cfg.outlier_window, cfg.outlier_threshold)
+        if cfg.detrend_mode != "none":
+            p = detrend_profile(p, cfg.detrend_mode)
 
-            if cfg.detrend_mode != "none":
-                p = detrend_profile(p, cfg.detrend_mode)
+        if cfg.bandpass:
+            if cfg.bandpass_method == "fft":
+                p = fft_bandpass(p, step_dx, cfg.bandpass_low, cfg.bandpass_high)
+            else:
+                p = iir_bandpass(p, step_dx, cfg.bandpass_low, cfg.bandpass_high)
 
-            if cfg.bandpass:
-                if cfg.bandpass_method == "fft":
-                    p = fft_bandpass(p, step_dx, cfg.bandpass_low, cfg.bandpass_high)
-                else:
-                    p = iir_bandpass(p, step_dx, cfg.bandpass_low, cfg.bandpass_high)
-
-            set_line(z_arr, i, p)
-
-            if progress_cb and i % max(1, n_lines // 20) == 0:
-                progress_cb(cb_offset + cb_scale * i / n_lines)
+        return p, True
 
     ny, nx = z_out.shape
+    total = ny + nx  # both passes
 
     # Pass 1: clean along rows (longitudinal)
-    _clean_direction(
-        z_out, ny,
-        get_line=lambda z, i: z[i, :].copy(),
-        set_line=lambda z, i, p: z.__setitem__((i, slice(None)), p),
-        step_dx=dx, cb_offset=0.0, cb_scale=0.5)
+    for i in range(ny):
+        p, ok = _clean_1d(z_out[i, :].copy(), dx)
+        if ok:
+            z_out[i, :] = p
+        if progress_cb and i % max(1, ny // 20) == 0:
+            progress_cb(0.5 * i / ny)
 
     # Pass 2: clean along columns (transverse)
-    _clean_direction(
-        z_out, nx,
-        get_line=lambda z, j: z[:, j].copy(),
-        set_line=lambda z, j, p: z.__setitem__((slice(None), j), p),
-        step_dx=dy, cb_offset=0.5, cb_scale=0.5)
+    for j in range(nx):
+        p, ok = _clean_1d(z_out[:, j].copy(), dy)
+        if ok:
+            z_out[:, j] = p
+        if progress_cb and j % max(1, nx // 20) == 0:
+            progress_cb(0.5 + 0.5 * j / nx)
 
     # 3) Extract targeted profiles
     raw_profiles = extract_profiles(z_out, direction, every_n)

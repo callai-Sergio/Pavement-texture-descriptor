@@ -4,25 +4,29 @@ A project to evaluate and analyze pavement textures via the **TextureLab** Strea
 
 ## 🔬 Features & Analysis Pipeline
 
-**TextureLab v1.1.0** provides a comprehensive pipeline for evaluating 3D pavement scans (LAZ/LAS/CSV/TXT) by extracting ISO-standard descriptors across multiple profiles:
+**TextureLab v1.2.0** provides a comprehensive pipeline for evaluating 3D pavement scans (LAZ/LAS/CSV/TXT) by extracting ISO-standard descriptors across multiple profiles:
 
 1. **Preprocessing Pipeline**:
    - **Plane Removal:** Planar detrending or polynomial surface removal (enabled by default).
    - **Gap Interpolation:** Linear interpolation for invalid / NaN points.
-   - **Outlier Filtering:** Hampel filter for robust spike removal in both row and column directions (enabled by default).
-   - **Macrotexture Downsampling:** Block averaging to desired target resolutions.
-   - **Bandpass Filtering:** ISO-13473-1 compliant Butterworth filters (e.g., for MPD).
-   - **Two-pass cleaning:** Outlier filtering is applied in both longitudinal and transverse directions, catching spikes regardless of orientation.
+   - **Outlier Filtering:** Hampel filter with mm-based window, applied in **both row and column** directions (two-pass cleaning). Enabled by default with K=3.5.
+   - **Block-Average Downsampling:** Anti-aliased resampling to target resolution (never stride-based).
+   - **Bandpass Filtering:** ISO-13473-1 compliant FFT/Butterworth filters (e.g., for MPD).
 2. **Descriptor Extraction**: 
-   - Generates core statistics (MPD, ETD, Ra, Rq, Rsk, Rku, Sa, Sdr, g-factor, Fractal Dimension).
-3. **Data Science Analytics**: 
-   - PCA (per-surface or per-profile), K-Means / GMM / Ward Clustering, Regression analysis, Isolation Forest anomaly detection, and Feature Selection.
-4. **Reproducible Batch Processing**: 
-   - Support for saving and loading execution "recipes" (YAML).
-   - Generates comprehensive result summaries (CSV, Excel, JSON with preprocessing logs).
-5. **File Support**:
-   - Supports CSV, TXT (tab/comma delimited), LAZ, and LAS formats.
-   - Upload limit: **2.5 GB** per file.
+   - Core statistics: MPD, ETD, Ra, Rq, Rsk, Rku, Sa, Sdr, g-factor, Fractal Dimension.
+3. **Physically Realistic 3D Rendering**:
+   - **Vertical exaggeration** slider (default 0.3) – affects rendering only, not metrics.
+   - **Robust colour scale** (P1–P99 percentile clamping) so outliers don't wash out the colormap.
+   - Block-averaged downsampling in the renderer for anti-aliased visualization.
+4. **Data Science Analytics**: 
+   - PCA (**per-surface**, **per-profile**, or **per-sample** scope), with **sample selector** to pick which files to include.
+   - K-Means / GMM / Ward Clustering, Regression, Isolation Forest anomaly detection, Feature Selection.
+5. **Reproducible Batch Processing**: 
+   - Save and load execution "recipes" (YAML).
+   - Results: CSV, Excel, JSON with preprocessing logs.
+6. **File Support**:
+   - CSV, TXT (tab/comma delimited), LAZ, and LAS formats.
+   - Upload limit: **3.5 GB** per file.
 
 ## 🚀 How to share and deploy this app for others to test (Streamlit Community Cloud)
 
