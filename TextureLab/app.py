@@ -248,6 +248,7 @@ def _init_state():
         "processed": False,
         "logs": [],
         "page": "home",
+        "selected_params": [],
     }
     for k, v in defaults.items():
         if k not in st.session_state:
