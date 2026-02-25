@@ -49,21 +49,42 @@ class SurfaceGrid:
 # ---------------------------------------------------------------------------
 # CSV readers
 # ---------------------------------------------------------------------------
-def _sniff_csv_format(path: str) -> str:
-    """Detect whether CSV is 'xyz' (x,y,z columns) or 'matrix' (dense grid)."""
+def _sniff_csv_format(path: str) -> Tuple[str, int, Optional[str]]:
+    """Detect format ('xyz' or 'matrix'), number of header rows to skip, and delimiter."""
+    skip_rows = 0
+    fmt = "matrix"
+    delimiter = ","
     with open(path, "r") as f:
-        first_lines = [f.readline() for _ in range(5)]
-    # Count columns in first non-empty line
-    for line in first_lines:
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        ncols = len(line.split(","))
-        if ncols == 3:
-            return "xyz"
-        else:
-            return "matrix"
-    return "matrix"
+        for _ in range(200):
+            line = f.readline()
+            if not line:
+                break
+            line_str = line.strip()
+            if not line_str or line_str.startswith("#"):
+                skip_rows += 1
+                continue
+            
+            # Try parsing line to see if it contains only numeric data
+            found_numeric = False
+            for delim in [";", "\t", ",", " "]:
+                parts = [p.strip() for p in line_str.split(delim) if p.strip()]
+                if len(parts) >= 1:
+                    try:
+                        _ = [float(p) for p in parts]
+                        # Successfully parsed as numbers
+                        delimiter = delim if delim != " " else None
+                        if len(parts) == 3:
+                            fmt = "xyz"
+                        else:
+                            fmt = "matrix"
+                        return fmt, skip_rows, delimiter
+                    except ValueError:
+                        pass
+            
+            # If we reach here, it's a metadata/header line without '#'
+            skip_rows += 1
+
+    return fmt, skip_rows, delimiter
 
 
 def read_csv_xyz(path: str, dx: float, dy: float,
@@ -102,11 +123,18 @@ def read_csv_xyz(path: str, dx: float, dy: float,
 
 
 def read_csv_matrix(path: str, dx: float, dy: float,
+                    skip_rows: int = 0, delimiter: Optional[str] = ",",
                     units_xy: str = "mm",
                     units_z: str = "mm") -> SurfaceGrid:
     """Read dense matrix CSV (rows=y, cols=x)."""
-    # Skip comment lines
-    z = np.loadtxt(path, delimiter=",", comments="#")
+    try:
+        # Pandas is usually faster
+        df = pd.read_csv(path, sep=delimiter, skiprows=skip_rows, header=None, engine="c" if delimiter else "python")
+        z = df.values.astype(np.float64)
+    except Exception:
+        # Fallback
+        z = np.loadtxt(path, delimiter=delimiter, skiprows=skip_rows, comments="#")
+        
     if z.ndim == 1:
         z = z.reshape(1, -1)
     return SurfaceGrid(
@@ -118,11 +146,11 @@ def read_csv_matrix(path: str, dx: float, dy: float,
 
 
 def read_csv(path: str, dx: float, dy: float, **kw) -> SurfaceGrid:
-    """Auto-detect CSV format and read."""
-    fmt = _sniff_csv_format(path)
+    """Auto-detect CSV/TXT format and read."""
+    fmt, skip_rows, delim = _sniff_csv_format(path)
     if fmt == "xyz":
-        return read_csv_xyz(path, dx, dy, **kw)
-    return read_csv_matrix(path, dx, dy, **kw)
+        return read_csv_xyz(path, dx, dy, **kw) # xyz currently assumes typical pandas CSV
+    return read_csv_matrix(path, dx, dy, skip_rows=skip_rows, delimiter=delim, **kw)
 
 
 # ---------------------------------------------------------------------------

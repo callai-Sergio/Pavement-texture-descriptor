@@ -4,7 +4,7 @@ A project to evaluate and analyze pavement textures via the **TextureLab** Strea
 
 ## 🔬 Features & Analysis Pipeline
 
-**TextureLab v1.2.0** provides a comprehensive pipeline for evaluating 3D pavement scans (LAZ/LAS/CSV/TXT) by extracting ISO-standard descriptors across multiple profiles:
+**TextureLab v1.2.1** provides a comprehensive pipeline for evaluating 3D pavement scans (LAZ/LAS/CSV/TXT) by extracting ISO-standard descriptors across multiple profiles:
 
 1. **Preprocessing Pipeline**:
    - **Plane Removal:** Planar detrending or polynomial surface removal (enabled by default).
@@ -25,8 +25,8 @@ A project to evaluate and analyze pavement textures via the **TextureLab** Strea
    - Save and load execution "recipes" (YAML).
    - Results: CSV, Excel, JSON with preprocessing logs.
 6. **File Support**:
-   - CSV, TXT (tab/comma delimited), LAZ, and LAS formats.
-   - Upload limit: **3.5 GB** per file.
+   - CSV, TXT (tab/comma/space delimited), LAZ, and LAS formats. Automatically ignores text headers.
+   - Upload limit: **3.6 GB** per file (increased websocket message limit).
 
 ## 🚀 How to share and deploy this app for others to test (Streamlit Community Cloud)
 

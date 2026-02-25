@@ -48,7 +48,7 @@ from components.export_manager import (
 # ===================================================================
 # Constants
 # ===================================================================
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.1"
 APP_AUTHOR = "Sergio Callai"
 APP_YEAR = "2025"
 
