@@ -1,0 +1,19 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.14.0, pytest-9.0.2, pluggy-1.6.0
+rootdir: C:\Users\callai\Nextcloud2\antigravity - ply\Texture descriptor\Pavement-texture-descriptor
+plugins: anyio-4.11.0
+collected 7 items
+
+TextureLab\tests\test_preprocessing.py ..F....                           [100%]
+
+================================== FAILURES ===================================
+_________________________ test_interpolate_grid_gaps __________________________
+TextureLab\tests\test_preprocessing.py:56: in test_interpolate_grid_gaps
+    assert log["interpolated_points"] == [1, 1]
+E   assert [np.int64(1), 0] == [1, 1]
+E     
+E     At index 1 diff: 0 != 1
+E     Use -v to get more diff
+=========================== short test summary info ===========================
+FAILED TextureLab/tests/test_preprocessing.py::test_interpolate_grid_gaps - a...
+========================= 1 failed, 6 passed in 0.68s =========================

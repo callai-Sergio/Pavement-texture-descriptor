@@ -48,7 +48,7 @@ from components.export_manager import (
 # ===================================================================
 # Constants
 # ===================================================================
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 APP_AUTHOR = "Sergio Callai"
 APP_YEAR = "2025"
 
@@ -228,6 +228,30 @@ st.markdown("""
         margin-top: 0.4rem;
         line-height: 1.4;
     }
+
+    /* File uploader list expansion to show more files per page */
+    div[data-testid="stFileUploader"] ul {
+        max-height: 350px !important;
+        overflow-y: auto;
+    }
+
+    /* Compact expander headers so long filenames don't clutter */
+    div[data-testid="stExpander"] details summary {
+        font-size: 0.8rem !important;
+        overflow: hidden;
+    }
+    div[data-testid="stExpander"] details summary span {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+    }
+    div[data-testid="stExpander"] details summary svg {
+        flex-shrink: 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -249,6 +273,7 @@ def _init_state():
         "logs": [],
         "page": "home",
         "selected_params": [],
+        "uploader_key": 0,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -303,7 +328,10 @@ with st.sidebar:
     if st.session_state.get("processed", False):
         st.markdown("### 🧹 Data Management")
         if st.button("🗑️ Clear all loaded data", use_container_width=True, type="secondary"):
+            current_key = st.session_state.get("uploader_key", 0)
+            st.session_state.clear()
             _init_state()
+            st.session_state["uploader_key"] = current_key + 1
             _set_page("home")
             st.rerun()
             
@@ -347,13 +375,13 @@ def render_settings_panel():
 
         st.markdown("### 🔧 Pre-processing")
         with st.expander("Plane / surface removal"):
-            plane_mode = st.selectbox("Mode", ["none", "plane", "polynomial"],
+            plane_mode = st.selectbox("Mode", ["plane", "none", "polynomial"],
                                       key="s_plane")
             poly_order = (st.slider("Polynomial order", 1, 5, 2, key="s_poly")
                           if plane_mode == "polynomial" else 2)
 
         with st.expander("Outlier filtering"):
-            outlier_method = st.selectbox("Method", ["none", "hampel", "median"],
+            outlier_method = st.selectbox("Method", ["hampel", "median", "none"],
                                           key="s_out")
             outlier_window = st.slider("Window size", 3, 21, 7, step=2,
                                        key="s_outw")
@@ -617,7 +645,8 @@ def render_summary():
                     st.caption("Colour = height after pre-processing. Axes in grid units.")
                     st.plotly_chart(
                         heatmap_2d(grid_obj[0].z, dx_val, dy_val,
-                                   title=f"Surface – {fname}"),
+                                   title=f"Surface – {fname}",
+                                   units_z=st.session_state.get("s_uz", "units")),
                         use_container_width=True)
                 else:
                     st.caption(
@@ -625,7 +654,8 @@ def render_summary():
                         "Drag to rotate, scroll to zoom. Downsampled for performance.")
                     st.plotly_chart(
                         surface_3d(grid_obj[0].z, dx_val, dy_val,
-                                   title=f"3D Surface – {fname}"),
+                                   title=f"3D Surface – {fname}",
+                                   units_z=st.session_state.get("s_uz", "units")),
                         use_container_width=True)
 
     if st.session_state["warnings"]:
@@ -660,7 +690,8 @@ def render_table(dx, dy, agg_mode, cfg):
     with col_e3:
         json_str = export_json_report(
             agg, areal, settings=cfg.to_dict(),
-            metadata={"file": selected, "dx": dx, "dy": dy})
+            metadata={"file": selected, "dx": dx, "dy": dy},
+            logs=st.session_state.get("logs", []))
         st.download_button("⬇ JSON", json_str,
                            "texturelab_report.json", "application/json")
 
@@ -771,12 +802,25 @@ def render_visualization():
 def render_data_science():
     """Data Science tab with PCA, Clustering, Regression, Anomaly, Features."""
     fnames = st.session_state["file_names"]
+    
+    scope = "Per Profile (All data)"
+    if len(fnames) >= 2:
+        st.markdown("### Data Scope")
+        scope = st.radio("Analysis Basis", ["Per Surface (File average)", "Per Profile (All data)"], horizontal=True)
+    
     all_rows = []
-    for fn in fnames:
-        for row in st.session_state["results_1d"].get(fn, []):
-            r = dict(row)
-            r["_file"] = fn
-            all_rows.append(r)
+    if scope == "Per Surface (File average)":
+        for fn in fnames:
+            agg = dict(st.session_state["aggregated"].get(fn, {}))
+            agg["_file"] = fn
+            all_rows.append(agg)
+    else:
+        for fn in fnames:
+            for row in st.session_state["results_1d"].get(fn, []):
+                r = dict(row)
+                r["_file"] = fn
+                all_rows.append(r)
+                
     if not all_rows:
         st.warning("No data available.")
         return
@@ -1014,9 +1058,10 @@ def page_new():
     dx, dy, units_xy, units_z, direction, every_n, agg_mode, selected_params, cfg = render_settings_panel()
 
     uploaded = st.file_uploader(
-        "Upload surface file (CSV / LAZ / LAS)",
-        type=["csv", "laz", "las"],
+        "Upload surface file (CSV / TXT / LAZ / LAS)",
+        type=["csv", "txt", "laz", "las"],
         accept_multiple_files=False,
+        key=f"uploader_{st.session_state.get('uploader_key', 0)}_single",
         help="Upload one surface measurement file.")
 
     if uploaded and st.button("🚀  Run Analysis", use_container_width=True):
@@ -1128,9 +1173,10 @@ def page_batch():
     dx, dy, units_xy, units_z, direction, every_n, agg_mode, selected_params, cfg = render_settings_panel()
 
     uploaded = st.file_uploader(
-        "Upload surface files (CSV / LAZ / LAS)",
-        type=["csv", "laz", "las"],
+        "Upload surface files (CSV / TXT / LAZ / LAS)",
+        type=["csv", "txt", "laz", "las"],
         accept_multiple_files=True,
+        key=f"uploader_{st.session_state.get('uploader_key', 0)}_batch",
         help="Upload 2+ files for batch comparison.")
 
     if uploaded and len(uploaded) >= 1 and st.button("🚀  Run Batch Analysis",
@@ -1293,7 +1339,7 @@ def page_compare():
             fig.update_layout(
                 template="plotly_dark",
                 xaxis_title="Material Ratio (%)",
-                yaxis_title="Height",
+                yaxis_title=f"Height ({st.session_state.get('s_uz', 'units')})",
                 hovermode="x unified"
             )
             st.plotly_chart(fig, use_container_width=True)
@@ -1321,7 +1367,7 @@ def page_compare():
                         with cols[j]:
                             st.markdown(f"**{fn}**")
                             # Render 3D surface plot for each
-                            fig_3d = surface_3d(grid_obj[0].z, dx_val, dy_val, title="")
+                            fig_3d = surface_3d(grid_obj[0].z, dx_val, dy_val, title="", units_z=st.session_state.get("s_uz", "units"))
                             # Adjust margins to fit better in small columns
                             fig_3d.update_layout(margin=dict(l=0, r=0, t=0, b=0), height=400)
                             st.plotly_chart(fig_3d, use_container_width=True)

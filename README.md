@@ -2,6 +2,28 @@
 
 A project to evaluate and analyze pavement textures via the **TextureLab** Streamlit application.
 
+## 🔬 Features & Analysis Pipeline
+
+**TextureLab v1.1.0** provides a comprehensive pipeline for evaluating 3D pavement scans (LAZ/LAS/CSV/TXT) by extracting ISO-standard descriptors across multiple profiles:
+
+1. **Preprocessing Pipeline**:
+   - **Plane Removal:** Planar detrending or polynomial surface removal (enabled by default).
+   - **Gap Interpolation:** Linear interpolation for invalid / NaN points.
+   - **Outlier Filtering:** Hampel filter for robust spike removal in both row and column directions (enabled by default).
+   - **Macrotexture Downsampling:** Block averaging to desired target resolutions.
+   - **Bandpass Filtering:** ISO-13473-1 compliant Butterworth filters (e.g., for MPD).
+   - **Two-pass cleaning:** Outlier filtering is applied in both longitudinal and transverse directions, catching spikes regardless of orientation.
+2. **Descriptor Extraction**: 
+   - Generates core statistics (MPD, ETD, Ra, Rq, Rsk, Rku, Sa, Sdr, g-factor, Fractal Dimension).
+3. **Data Science Analytics**: 
+   - PCA (per-surface or per-profile), K-Means / GMM / Ward Clustering, Regression analysis, Isolation Forest anomaly detection, and Feature Selection.
+4. **Reproducible Batch Processing**: 
+   - Support for saving and loading execution "recipes" (YAML).
+   - Generates comprehensive result summaries (CSV, Excel, JSON with preprocessing logs).
+5. **File Support**:
+   - Supports CSV, TXT (tab/comma delimited), LAZ, and LAS formats.
+   - Upload limit: **2.5 GB** per file.
+
 ## 🚀 How to share and deploy this app for others to test (Streamlit Community Cloud)
 
 The easiest and completely **free** way to share this application publicly is using [Streamlit Community Cloud](https://share.streamlit.io). It connects directly to your GitHub repository and automatically updates whenever you push new changes.

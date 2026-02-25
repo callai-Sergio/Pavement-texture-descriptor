@@ -116,7 +116,8 @@ def export_excel(df: pd.DataFrame) -> bytes:
 
 
 def export_json_report(aggregated: dict, areal: dict,
-                       settings: dict, metadata: dict) -> str:
+                       settings: dict, metadata: dict,
+                       logs: list = None) -> str:
     """Full JSON report including settings for reproducibility."""
     report = {
         "texturelab_version": "1.0.0",
@@ -125,6 +126,8 @@ def export_json_report(aggregated: dict, areal: dict,
         "profile_results_aggregated": _sanitize(aggregated),
         "areal_results": _sanitize(areal),
     }
+    if logs:
+        report["processing_logs"] = logs
     return json.dumps(report, indent=2, default=str)
 
 

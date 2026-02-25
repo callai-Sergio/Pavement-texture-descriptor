@@ -38,7 +38,8 @@ def boxplot(df: pd.DataFrame, col: str,
 
 
 def heatmap_2d(z: np.ndarray, dx: float, dy: float,
-               title: str = "Surface height map") -> go.Figure:
+               title: str = "Surface height map",
+               units_z: str = "units") -> go.Figure:
     ny, nx = z.shape
     x_coords = np.arange(nx) * dx
     y_coords = np.arange(ny) * dy
@@ -51,7 +52,7 @@ def heatmap_2d(z: np.ndarray, dx: float, dy: float,
         x=x_coords,
         y=y_coords,
         colorscale="Viridis",
-        colorbar=dict(title="Height (units)", thickness=15),
+        colorbar=dict(title=f"Height ({units_z})", thickness=15),
     ))
     # Auto-height based on actual aspect ratio, capped at reasonable size
     plot_width = 700
@@ -66,7 +67,8 @@ def heatmap_2d(z: np.ndarray, dx: float, dy: float,
 
 def surface_3d(z: np.ndarray, dx: float, dy: float,
                title: str = "3D Surface",
-               max_pts: int = 300) -> go.Figure:
+               max_pts: int = 300,
+               units_z: str = "units") -> go.Figure:
     """Interactive 3D surface mesh (downsampled for performance)."""
     ny, nx = z.shape
     # Downsample if grid is too large for smooth interaction
@@ -80,7 +82,7 @@ def surface_3d(z: np.ndarray, dx: float, dy: float,
     fig = go.Figure(data=[go.Surface(
         z=z_ds, x=x_coords, y=y_coords,
         colorscale="Viridis",
-        colorbar=dict(title="Height", thickness=12, len=0.6),
+        colorbar=dict(title=f"Height ({units_z})", thickness=12, len=0.6),
         contours=dict(
             z=dict(show=True, usecolormap=True, highlightcolor="white",
                    project_z=True),
@@ -94,7 +96,7 @@ def surface_3d(z: np.ndarray, dx: float, dy: float,
         scene=dict(
             xaxis_title="X",
             yaxis_title="Y",
-            zaxis_title="Height",
+            zaxis_title=f"Height ({units_z})",
             camera=dict(eye=dict(x=1.5, y=1.5, z=0.8)),
             aspectmode="manual",
             aspectratio=dict(

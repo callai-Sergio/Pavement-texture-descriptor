@@ -223,45 +223,67 @@ def preprocess_surface(z: np.ndarray, dx: float, dy: float,
     elif cfg.plane_removal == "polynomial":
         z_out = remove_polynomial(z_out, dx, dy, cfg.poly_order)
 
-    # 2) Extract profiles
-    profile_dx = dx if direction == "longitudinal" else dy
+    # 2) Clean full surface grid in BOTH directions (rows then columns)
+    #    This catches spikes regardless of their orientation.
+
+    def _clean_direction(z_arr, n_lines, get_line, set_line, step_dx, cb_offset=0.0, cb_scale=0.5):
+        for i in range(n_lines):
+            p = get_line(z_arr, i)
+
+            missing_frac = np.isnan(p).sum() / len(p)
+            if missing_frac > cfg.max_missing_fraction:
+                continue
+
+            if cfg.interp_missing:
+                p = interpolate_gaps(p)
+
+            if cfg.outlier_method != "none":
+                p = filter_outliers_profile(
+                    p, cfg.outlier_method,
+                    cfg.outlier_window, cfg.outlier_threshold)
+
+            if cfg.detrend_mode != "none":
+                p = detrend_profile(p, cfg.detrend_mode)
+
+            if cfg.bandpass:
+                if cfg.bandpass_method == "fft":
+                    p = fft_bandpass(p, step_dx, cfg.bandpass_low, cfg.bandpass_high)
+                else:
+                    p = iir_bandpass(p, step_dx, cfg.bandpass_low, cfg.bandpass_high)
+
+            set_line(z_arr, i, p)
+
+            if progress_cb and i % max(1, n_lines // 20) == 0:
+                progress_cb(cb_offset + cb_scale * i / n_lines)
+
+    ny, nx = z_out.shape
+
+    # Pass 1: clean along rows (longitudinal)
+    _clean_direction(
+        z_out, ny,
+        get_line=lambda z, i: z[i, :].copy(),
+        set_line=lambda z, i, p: z.__setitem__((i, slice(None)), p),
+        step_dx=dx, cb_offset=0.0, cb_scale=0.5)
+
+    # Pass 2: clean along columns (transverse)
+    _clean_direction(
+        z_out, nx,
+        get_line=lambda z, j: z[:, j].copy(),
+        set_line=lambda z, j, p: z.__setitem__((slice(None), j), p),
+        step_dx=dy, cb_offset=0.5, cb_scale=0.5)
+
+    # 3) Extract targeted profiles
     raw_profiles = extract_profiles(z_out, direction, every_n)
     profiles: list[np.ndarray] = []
 
-    total = len(raw_profiles)
     for idx, p in enumerate(raw_profiles):
-        # Missing fraction check
         missing_frac = np.isnan(p).sum() / len(p)
         if missing_frac > cfg.max_missing_fraction:
             warnings.append(
                 f"Profile {idx}: {missing_frac:.1%} missing – rejected "
                 f"(threshold {cfg.max_missing_fraction:.1%})")
             continue
-
-        # Interpolate gaps
-        if cfg.interp_missing:
-            p = interpolate_gaps(p)
-
-        # Outlier filtering
-        if cfg.outlier_method != "none":
-            p = filter_outliers_profile(
-                p, cfg.outlier_method,
-                cfg.outlier_window, cfg.outlier_threshold)
-
-        # Detrend
-        if cfg.detrend_mode != "none":
-            p = detrend_profile(p, cfg.detrend_mode)
-
-        # Band filtering
-        if cfg.bandpass:
-            if cfg.bandpass_method == "fft":
-                p = fft_bandpass(p, profile_dx, cfg.bandpass_low, cfg.bandpass_high)
-            else:
-                p = iir_bandpass(p, profile_dx, cfg.bandpass_low, cfg.bandpass_high)
-
         profiles.append(p)
-        if progress_cb and idx % max(1, total // 20) == 0:
-            progress_cb(idx / total)
 
     if not profiles:
         warnings.append("All profiles were rejected – check data quality!")

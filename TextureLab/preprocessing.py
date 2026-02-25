@@ -100,7 +100,7 @@ def interpolate_grid_gaps(z: np.ndarray, direction: str = "rows", max_gap: int =
     """Interpolate gaps along rows or columns.
     Returns the interpolated grid and a log with statistics.
     """
-    log: Dict[str, Any] = {"interpolated_points": 0, "rejected_profiles": 0}
+    log: Dict[str, Any] = {"interpolated_points": [], "rejected_profiles": []}
     ny, nx = z.shape
     if direction == "rows":
         for i in range(ny):
