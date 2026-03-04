@@ -56,3 +56,46 @@ The easiest and completely **free** way to share this application publicly is us
    Once deployed, you will get a public URL (e.g., `https://pavement-texture.streamlit.app`) that you can send to anyone to test the application directly in their browser without installing Python.
 
 *(Note: The Community Cloud has a 1GB memory limit. For extremely large LAZ files > 200MB, users might experience slow downs, but it works perfectly for standard pavement scans).*
+
+## 🤖 AI Assistant (Ollama LLM Integration)
+
+TextureLab includes a local AI assistant powered by [Ollama](https://ollama.com). All AI processing runs **entirely on your machine** – no data is sent to external APIs.
+
+### Features
+- **Draft Generator** – create project proposals, reports, and abstracts from form inputs.
+- **Results Interpreter** – paste metrics JSON or select session data for automatic technical interpretation.
+- **Interactive Chat** – ask questions about textures, ISO standards, and your data.
+
+### Setup
+
+1. **Install Ollama** → [ollama.com/download](https://ollama.com/download)
+2. **Start the server and pull a model:**
+   ```bash
+   ollama serve
+   ollama pull gemma3
+   ```
+3. **Install the Python dependency** (included in `requirements.txt`):
+   ```bash
+   pip install requests
+   ```
+4. **Run TextureLab** as usual:
+   ```bash
+   cd TextureLab
+   streamlit run app.py
+   ```
+5. Click **🤖 AI Assistant** in the sidebar.
+
+### Desktop Usage
+
+The `texturelab_llm` package can also be used from `TextureLabDesktop`:
+```bash
+cd Pavement-texture-descriptor
+python TextureLabDesktop/ai_draft_demo.py
+```
+
+### Supported Models
+| Model | Notes |
+|-------|-------|
+| `gemma3` | Default – good quality, moderate speed |
+| `gemma2:2b` | Lightweight fallback – faster, smaller context |
+| Any Ollama model | Selectable from the UI dropdown |

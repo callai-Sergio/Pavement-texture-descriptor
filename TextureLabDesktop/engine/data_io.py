@@ -89,11 +89,14 @@ def _sniff_csv_format(path: str) -> Tuple[str, int, Optional[str]]:
 
 def read_csv_xyz(path: str, dx: float, dy: float,
                  chunk_size: int = 500_000,
+                 skip_rows: int = 0,
                  units_xy: str = "mm",
                  units_z: str = "mm") -> SurfaceGrid:
     """Read x,y,z CSV and rasterize to regular grid."""
     chunks = []
+    # If skiprows is > 0, we need to pass it to pd.read_csv
     for chunk in pd.read_csv(path, header=None, names=["x", "y", "z"],
+                             skiprows=skip_rows,
                              chunksize=chunk_size):
         chunks.append(chunk)
     df = pd.concat(chunks, ignore_index=True)
@@ -149,7 +152,7 @@ def read_csv(path: str, dx: float, dy: float, **kw) -> SurfaceGrid:
     """Auto-detect CSV/TXT format and read."""
     fmt, skip_rows, delim = _sniff_csv_format(path)
     if fmt == "xyz":
-        return read_csv_xyz(path, dx, dy, **kw) # xyz currently assumes typical pandas CSV
+        return read_csv_xyz(path, dx, dy, skip_rows=skip_rows, **kw)
     return read_csv_matrix(path, dx, dy, skip_rows=skip_rows, delimiter=delim, **kw)
 
 

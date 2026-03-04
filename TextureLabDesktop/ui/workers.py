@@ -68,17 +68,20 @@ class ProcessingWorker(QThread):
                     f"Loading {fname} ({fi+1}/{total})…")
 
                 # Load
+                t_load = time.perf_counter()
                 grid = load_surface(fpath, self.dx, self.dy,
                                     units_xy=self.units_xy,
                                     units_z=self.units_z)
+                dt_load = time.perf_counter() - t_load
                 results["logs"].append(
-                    f"📄 {fname}: grid {grid.ny}×{grid.nx}")
+                    f"📄 {fname}: loaded ({dt_load:.1f}s), grid {grid.ny}×{grid.nx}")
 
                 # Preprocess
                 self.progress.emit(
                     int(100 * (fi + 0.3) / total),
                     f"Preprocessing {fname}…")
 
+                t_pre = time.perf_counter()
                 def _prog(pct):
                     self.progress.emit(
                         int(100 * (fi + 0.3 + 0.4 * pct / 100) / total),
@@ -88,6 +91,8 @@ class ProcessingWorker(QThread):
                     grid.z, self.dx, self.dy, self.cfg,
                     self.direction, self.every_n,
                     progress_cb=_prog)
+                dt_pre = time.perf_counter() - t_pre
+                results["logs"].append(f"  🔧 Filtering: {dt_pre:.1f}s")
 
                 grid.z = z_proc.copy()
                 results["surfaces"].append(grid)
@@ -101,6 +106,7 @@ class ProcessingWorker(QThread):
                     int(100 * (fi + 0.7) / total),
                     f"Computing descriptors for {fname}…")
 
+                t_desc = time.perf_counter()
                 def _desc_prog(pct):
                     self.progress.emit(
                         int(100 * (fi + 0.7 + 0.3 * pct / 100) / total),
@@ -109,6 +115,9 @@ class ProcessingWorker(QThread):
                 per_profile, areal = compute_all(
                     profiles, z_proc, self.dx, self.dy,
                     progress_cb=_desc_prog)
+                dt_desc = time.perf_counter() - t_desc
+                results["logs"].append(f"  📊 Descriptors: {dt_desc:.1f}s")
+                
                 agg = aggregate_profiles(per_profile, self.agg_mode)
 
                 results["profiles"][fname] = profiles

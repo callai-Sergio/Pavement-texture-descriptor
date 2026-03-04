@@ -14,6 +14,10 @@ from PyQt6.QtCore import Qt
 
 
 def main():
+    # Multiprocessing support for Windows/PyInstaller
+    import multiprocessing
+    multiprocessing.freeze_support()
+
     # High-DPI support
     os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
 

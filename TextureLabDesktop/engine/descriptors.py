@@ -73,11 +73,6 @@ def calc_core_stats_1d(profile: np.ndarray) -> dict:
         "Rp": float(np.max(zm)),
         "Rv": float(np.abs(np.min(zm))),
         "StdDev": float(np.std(z)),
-        "P5": float(np.percentile(z, 5)),
-        "P10": float(np.percentile(z, 10)),
-        "P50": float(np.percentile(z, 50)),
-        "P90": float(np.percentile(z, 90)),
-        "P95": float(np.percentile(z, 95)),
         "IQR": float(np.percentile(z, 75) - np.percentile(z, 25)),
     }
 
@@ -158,13 +153,10 @@ def calc_rk_params(profile: np.ndarray) -> dict:
     if n < 10:
         return {"Rk": 0.0, "Rpk": 0.0, "Rvk": 0.0, "Mr1": 0.0, "Mr2": 0.0}
     mr = np.linspace(0, 100, n)
-    best_start, best_slope = 0, np.inf
     span = int(0.4 * n)
-    for s in range(n - span):
-        slope = abs(z[s] - z[s + span]) / 40.0
-        if slope < best_slope:
-            best_slope = slope
-            best_start = s
+    # Vectorized search for the 40% span with minimum slope
+    slopes = np.abs(z[:-span] - z[span:]) / 40.0
+    best_start = np.argmin(slopes)
     return {
         "Rk": float(z[best_start] - z[best_start + span]),
         "Rpk": float(z[0] - z[best_start]),
@@ -301,16 +293,48 @@ def compute_profile_params(profile: np.ndarray, dx: float) -> dict:
 def compute_all(profiles: List[np.ndarray], z_grid: np.ndarray,
                 dx: float, dy: float,
                 progress_cb=None) -> Tuple[List[dict], dict]:
-    """Compute descriptors for all profiles + areal 3-D stats."""
-    per_profile: List[dict] = []
-    total = len(profiles)
-    for idx, p in enumerate(profiles):
-        per_profile.append(compute_profile_params(p, dx))
-        if progress_cb and idx % max(1, total // 20) == 0:
-            progress_cb(int(100 * idx / total))
-
+    """Compute descriptors for all profiles + areal 3-D stats in parallel."""
+    import concurrent.futures
+    import multiprocessing
+    
+    # Calculate areal stats (usually fast)
     areal = calc_core_stats_3d(z_grid, dx, dy)
-    return per_profile, areal
+    
+    total = len(profiles)
+    if total == 0:
+        return [], areal
+
+    # Use a process pool for the profile math
+    # We use a chunksize to reduce IPC overhead between processes
+    num_workers = max(1, multiprocessing.cpu_count() - 1)
+    chunksize = max(1, total // (num_workers * 4))
+    
+    results_1d: List[dict] = [None] * total # type: ignore
+    
+    with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
+        # Map compute_profile_params over the profiles
+        # We wrap the function to pass the DX parameter
+        from functools import partial
+        worker_func = partial(compute_profile_params, dx=dx)
+        
+        future_to_idx = {
+            executor.submit(worker_func, p): i 
+            for i, p in enumerate(profiles)
+        }
+        
+        count = 0
+        for future in concurrent.futures.as_completed(future_to_idx):
+            idx = future_to_idx[future]
+            try:
+                results_1d[idx] = future.result()
+            except Exception as e:
+                results_1d[idx] = {"error": str(e)}
+            
+            count += 1
+            if progress_cb and count % max(1, total // 50) == 0:
+                progress_cb(int(100 * count / total))
+                
+    return results_1d, areal
 
 
 def aggregate_profiles(per_profile: List[dict],

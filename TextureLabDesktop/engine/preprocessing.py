@@ -89,26 +89,25 @@ def remove_polynomial(z: np.ndarray, dx: float, dy: float,
 def hampel_filter_1d(profile: np.ndarray, win: int = 7,
                      threshold: float = 3.5) -> np.ndarray:
     """Hampel identifier – replace outliers with local median.
-
-    Parameters
-    ----------
-    win : int
-        Number of samples on each side (total 2*win+1).
-    threshold : float
-        Number of robust sigma for outlier classification (K factor).
+    Vectorized version using scipy.ndimage.median_filter.
     """
-    n = len(profile)
+    if win < 1:
+        return profile
+    
+    # 1) Robust local median
+    med = ndimage.median_filter(profile, size=2 * win + 1, mode='reflect')
+    
+    # 2) Local Mean Absolute Deviation (MAD)
+    abs_diff = np.abs(profile - med)
+    mad = 1.4826 * ndimage.median_filter(abs_diff, size=2 * win + 1, mode='reflect')
+    
+    # 3) Outlier mask
+    # We only classify points as outliers if MAD > 0 and the point itself is finite
+    # and the deviation exceeds the threshold.
+    outlier_mask = (mad > 0) & np.isfinite(profile) & (abs_diff > threshold * mad)
+    
     out = profile.copy()
-    for i in range(win, n - win):
-        window = profile[i - win:i + win + 1]
-        valid = window[np.isfinite(window)]
-        if len(valid) < 3:
-            continue
-        med = np.nanmedian(valid)
-        mad = 1.4826 * np.nanmedian(np.abs(valid - med))
-        if mad > 0 and np.isfinite(profile[i]):
-            if np.abs(profile[i] - med) > threshold * mad:
-                out[i] = med
+    out[outlier_mask] = med[outlier_mask]
     return out
 
 

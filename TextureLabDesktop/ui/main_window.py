@@ -131,7 +131,23 @@ class MainWindow(QMainWindow):
 
         splitter.setSizes([400, 400])
         layout.addWidget(splitter)
+        
+        # Connect internal panels
+        self.results_panel.file_selector.currentTextChanged.connect(self._on_surface_selected)
+
+        # Connect rendering controls for real-time refresh
+        self.settings_panel.vert_exag_slider.valueChanged.connect(self._refresh_viewer)
+        self.settings_panel.robust_color.stateChanged.connect(self._refresh_viewer)
+
         self.setCentralWidget(central)
+
+    def _refresh_viewer(self):
+        """Update visualization settings without re-processing."""
+        if hasattr(self, 'surface_viewer'):
+            self.surface_viewer.refresh(
+                self.settings_panel.vert_exag,
+                self.settings_panel.robust_color.isChecked()
+            )
 
     def _build_statusbar(self):
         self.statusBar().setStyleSheet("font-size: 12px;")
@@ -220,10 +236,6 @@ class MainWindow(QMainWindow):
 
         # Update results panel
         self.results_panel.set_results(results)
-
-        # Connect file selector to update 3D view
-        self.results_panel.file_selector.currentTextChanged.connect(
-            self._on_surface_selected)
 
     def _on_surface_selected(self, fname: str):
         if not self._results or not fname:

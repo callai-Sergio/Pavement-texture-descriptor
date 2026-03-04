@@ -317,6 +317,8 @@ with st.sidebar:
         _set_page("batch")
     if st.button("🔍  Compare Results", use_container_width=True, key="nav_compare"):
         _set_page("compare")
+    if st.button("🤖  AI Assistant", use_container_width=True, key="nav_ai"):
+        _set_page("ai_assistant")
 
     st.markdown("---")
     st.markdown("### 📚 Information")
@@ -1665,6 +1667,9 @@ elif page == "batch":
     page_batch()
 elif page == "compare":
     page_compare()
+elif page == "ai_assistant":
+    from pages.ai_assistant import page_ai_assistant
+    page_ai_assistant()
 elif page == "help":
     page_help()
 elif page == "about":
