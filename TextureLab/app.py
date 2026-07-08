@@ -342,8 +342,31 @@ with st.sidebar:
 
     if st.session_state.get("processed", False):
         st.markdown("### 🧹 Data Management")
-        proj_bytes = export_project(dict(st.session_state))
-        st.download_button("💾 Save Project", proj_bytes, file_name="texturelab_workspace.tlp", mime="application/octet-stream", use_container_width=True)
+        if st.button("💾 Save Project", use_container_width=True):
+            proj_bytes = export_project(dict(st.session_state))
+            import tkinter as tk
+            from tkinter import filedialog
+            
+            # Hide the main tkinter window
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes('-topmost', True)
+            
+            save_path = filedialog.asksaveasfilename(
+                title="Save TextureLab Project",
+                defaultextension=".tlp",
+                filetypes=[("TextureLab Project", "*.tlp"), ("All files", "*.*")],
+                initialfile="texturelab_workspace.tlp"
+            )
+            root.destroy()
+            
+            if save_path:
+                try:
+                    with open(save_path, "wb") as f:
+                        f.write(proj_bytes)
+                    st.success(f"✅ Project saved successfully to:\n`{save_path}`")
+                except Exception as e:
+                    st.error(f"Error saving project: {e}")
         
         if st.button("🗑️ Clear all loaded data", use_container_width=True, type="secondary"):
             current_key = st.session_state.get("uploader_key", 0)
