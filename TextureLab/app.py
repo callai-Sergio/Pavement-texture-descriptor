@@ -1455,20 +1455,90 @@ def page_compare():
                 st.warning("No surface data available.")
                 
         elif layout_mode == "Separate Subplots":
+            from src.descriptors import calc_rk_params
             for fn in fnames:
                 data = _get_abbott_data(fn)
                 if data:
                     mr, z_sub = data
+                    
+                    # Calculate parameters specifically for this 3D curve to draw accurate lines
+                    params_3d = calc_rk_params(z_sub)
+                    mr1, mr2 = params_3d["Mr1"], params_3d["Mr2"]
+                    rk = params_3d["Rk"]
+                    rpk, rvk = params_3d["Rpk"], params_3d["Rvk"]
+                    
+                    z_top = z_sub[0] - rpk
+                    z_bottom = z_sub[-1] + rvk
+                    
                     fig = go.Figure()
-                    fig.add_trace(go.Scatter(x=mr, y=z_sub, mode='lines', name=fn, line=dict(color=styles[fn]["color"], dash=styles[fn]["dash"])))
-                    fig.update_layout(title=fn, template="plotly_dark", xaxis_title="Material Ratio (%)", yaxis_title=f"Height ({st.session_state.get('s_uz', 'units')})", hovermode="x unified", height=400)
+                    
+                    # Rk Tangent Line (Blue)
+                    m = (z_bottom - z_top) / (mr2 - mr1) if mr2 > mr1 else 0
+                    z_at_0 = z_top - m * mr1
+                    z_at_100 = z_bottom + m * (100 - mr2)
+                    
+                    fig.add_trace(go.Scatter(
+                        x=[0, 100], y=[z_at_0, z_at_100],
+                        mode='lines', name='Rk Tangent',
+                        line=dict(color='blue', dash='solid', width=1)
+                    ))
+                    
+                    # Rpk Triangle Area
+                    fig.add_trace(go.Scatter(
+                        x=[0, mr1, 0, 0], y=[z_top, z_top, z_sub[0], z_top],
+                        mode='lines', fill='toself', fillcolor='rgba(255,0,0,0.3)',
+                        line=dict(color='red', width=1), name='Rpk Area'
+                    ))
+                    
+                    # Rvk Triangle Area
+                    fig.add_trace(go.Scatter(
+                        x=[100, mr2, 100, 100], y=[z_bottom, z_bottom, z_sub[-1], z_bottom],
+                        mode='lines', fill='toself', fillcolor='rgba(255,0,0,0.3)',
+                        line=dict(color='red', width=1), name='Rvk Area'
+                    ))
+                    
+                    # Horizontal Lines
+                    fig.add_trace(go.Scatter(
+                        x=[0, mr1], y=[z_top, z_top], mode='lines', 
+                        line=dict(color='gray', dash='dash', width=1), showlegend=False
+                    ))
+                    fig.add_trace(go.Scatter(
+                        x=[mr2, 100], y=[z_bottom, z_bottom], mode='lines', 
+                        line=dict(color='gray', dash='dash', width=1), showlegend=False
+                    ))
+                    
+                    # Vertical Lines
+                    z_min = z_sub[-1] - abs(rvk) - 0.5 # A bit below
+                    fig.add_trace(go.Scatter(
+                        x=[mr1, mr1], y=[z_top, z_min], mode='lines', 
+                        line=dict(color='gray', dash='dash', width=1), showlegend=False
+                    ))
+                    fig.add_trace(go.Scatter(
+                        x=[mr2, mr2], y=[z_bottom, z_min], mode='lines', 
+                        line=dict(color='gray', dash='dash', width=1), showlegend=False
+                    ))
+
+                    # The actual curve
+                    fig.add_trace(go.Scatter(
+                        x=mr, y=z_sub, mode='lines', name=fn, 
+                        line=dict(color=styles[fn]["color"], dash=styles[fn]["dash"], width=2)
+                    ))
+                    
+                    # Annotations
+                    fig.add_annotation(x=0, y=z_top + rpk/2, text="Rpk", showarrow=False, xanchor="right", xshift=-5, font=dict(color="red"))
+                    fig.add_annotation(x=0, y=z_top - rk/2, text="Rk", showarrow=False, xanchor="right", xshift=-5, font=dict(color="green"))
+                    fig.add_annotation(x=100, y=z_bottom - rvk/2, text="Rvk", showarrow=False, xanchor="left", xshift=5, font=dict(color="red"))
+                    fig.add_annotation(x=mr1, y=z_min, text="Mr1", showarrow=False, yanchor="top", yshift=-5, font=dict(color="green"))
+                    fig.add_annotation(x=mr2, y=z_min, text="Mr2", showarrow=False, yanchor="top", yshift=-5, font=dict(color="green"))
+                    
+                    fig.update_layout(title=fn, template="plotly_dark", xaxis_title="Material Ratio (%)", yaxis_title=f"Height ({st.session_state.get('s_uz', 'units')})", hovermode="x unified", height=500)
                     
                     col_p, col_t = st.columns([3, 1])
                     with col_p:
                         st.plotly_chart(fig, use_container_width=True)
                     with col_t:
                         st.markdown("<br><br>", unsafe_allow_html=True)
-                        st.markdown("**Parameters:**")
+                        st.markdown("**Parameters (Profile Avg):**")
                         agg = st.session_state["aggregated"].get(fn, {})
                         params = {"Parameter": [], "Value": []}
                         for k in ["Rk", "Rpk", "Rvk", "Mr1", "Mr2"]:
@@ -1477,6 +1547,13 @@ def page_compare():
                             params["Value"].append(f"{val:.3f}" if isinstance(val, (int, float)) else "-")
                         st.dataframe(pd.DataFrame(params), hide_index=True, use_container_width=True)
                         
+                        st.markdown("**Parameters (Surface):**")
+                        params_surf = {"Parameter": [], "Value": []}
+                        for k in ["Rk", "Rpk", "Rvk", "Mr1", "Mr2"]:
+                            val = params_3d.get(k)
+                            params_surf["Parameter"].append(k.replace("R", "S"))
+                            params_surf["Value"].append(f"{val:.3f}" if isinstance(val, (int, float)) else "-")
+                        st.dataframe(pd.DataFrame(params_surf), hide_index=True, use_container_width=True)
         elif layout_mode == "Group by Prefix":
             fig = go.Figure()
             groups = {}
