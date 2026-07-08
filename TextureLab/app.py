@@ -1579,6 +1579,25 @@ def page_compare():
             else:
                 st.warning("No surface data available.")
 
+        st.markdown("---")
+        st.markdown("#### Export Curve Data")
+        mr_std = np.linspace(0, 100, 1000)
+        export_dict = {"Material Ratio (%)": mr_std}
+        for fn in fnames:
+            data = _get_abbott_data(fn)
+            if data:
+                export_dict[fn] = np.interp(mr_std, data[0], data[1])
+        if len(export_dict) > 1:
+            df_export = pd.DataFrame(export_dict)
+            from components.export_manager import export_csv, export_excel
+            col_exp1, col_exp2 = st.columns(2)
+            with col_exp1:
+                st.download_button("⬇ Download CSV", export_csv(df_export),
+                                   "abbott_curves.csv", "text/csv")
+            with col_exp2:
+                st.download_button("⬇ Download Excel", export_excel(df_export),
+                                   "abbott_curves.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
     with tab_3d:
         st.markdown("### 🧊 3D Surfaces Gallery")
         st.markdown("Compare the visual topography of all loaded surfaces side-by-side.")
