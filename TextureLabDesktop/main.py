@@ -24,11 +24,11 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("TextureLab Desktop")
     app.setOrganizationName("TextureLab")
-    app.setApplicationVersion("2.0.0")
+    app.setApplicationVersion("2.1.0")
 
     # Apply dark theme
     try:
-        import qdarktheme
+        import qdarktheme  # type: ignore
         app.setStyleSheet(qdarktheme.load_stylesheet("dark"))
     except ImportError:
         # Fallback dark palette

@@ -144,3 +144,35 @@ def _sanitize(d: dict) -> dict:
         else:
             out[k] = v
     return out
+
+
+def export_pdf_report(df: pd.DataFrame, title: str = "TextureLab Analysis Report") -> bytes:
+    """Export a simple PDF report of the results table."""
+    try:
+        from fpdf import FPDF
+    except ImportError:
+        return b"%PDF-1.4\n%Error: fpdf2 not installed"
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("helvetica", 'B', 16)
+    pdf.cell(0, 10, title, align='C', new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(10)
+    
+    pdf.set_font("helvetica", 'B', 10)
+    cols = ["Parameter", "Value", "Unit"]
+    col_widths = [60, 40, 40]
+    
+    for i, col in enumerate(cols):
+        pdf.cell(col_widths[i], 10, col, border=1, align='C')
+    pdf.ln(10)
+    
+    pdf.set_font("helvetica", '', 10)
+    for _, row in df.iterrows():
+        for i, col in enumerate(cols):
+            val = str(row.get(col, ""))
+            val = val.replace("µ", "u")
+            pdf.cell(col_widths[i], 10, val[:30], border=1)
+        pdf.ln(10)
+    
+    return bytes(pdf.output())

@@ -128,6 +128,12 @@ class SettingsPanel(QDockWidget):
         agg_form.addRow("Mode:", self.agg_mode)
         layout.addWidget(grp_agg)
 
+        # ── Re-run Button ─────────────────────────────────────────
+        self.btn_rerun = QPushButton("▶ Re-run Analysis")
+        self.btn_rerun.setMinimumHeight(40)
+        self.btn_rerun.setStyleSheet("font-weight: bold; font-size: 14px; background-color: #636EFA; color: white;")
+        layout.addWidget(self.btn_rerun)
+
         layout.addStretch()
         self.setWidget(container)
 

@@ -42,13 +42,14 @@ from components.visualizer import (
 )
 from components.export_manager import (
     build_results_table, build_batch_table,
-    export_csv, export_excel, export_json_report,
+    export_csv, export_excel, export_json_report, export_pdf_report
 )
+from components.project_manager import export_project, load_project
 
 # ===================================================================
 # Constants
 # ===================================================================
-APP_VERSION = "1.2.1"
+APP_VERSION = "1.3.0"
 APP_AUTHOR = "Sergio Callai"
 APP_YEAR = "2025"
 
@@ -317,8 +318,6 @@ with st.sidebar:
         _set_page("batch")
     if st.button("🔍  Compare Results", use_container_width=True, key="nav_compare"):
         _set_page("compare")
-    if st.button("🤖  AI Assistant", use_container_width=True, key="nav_ai"):
-        _set_page("ai_assistant")
 
     st.markdown("---")
     st.markdown("### 📚 Information")
@@ -331,8 +330,21 @@ with st.sidebar:
 
     st.markdown("---")
     
+    st.markdown("### 💾 Workspace")
+    uploaded_project = st.file_uploader("Load Project (.tlp)", type=["tlp"], key="load_proj_uploader", label_visibility="collapsed")
+    if uploaded_project is not None and st.button("Load Workspace", use_container_width=True):
+        try:
+            load_project(uploaded_project.getvalue(), st.session_state)
+            st.success("Project loaded!")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Failed to load: {e}")
+
     if st.session_state.get("processed", False):
         st.markdown("### 🧹 Data Management")
+        proj_bytes = export_project(dict(st.session_state))
+        st.download_button("💾 Save Project", proj_bytes, file_name="texturelab_workspace.tlp", mime="application/octet-stream", use_container_width=True)
+        
         if st.button("🗑️ Clear all loaded data", use_container_width=True, type="secondary"):
             current_key = st.session_state.get("uploader_key", 0)
             st.session_state.clear()
@@ -699,7 +711,7 @@ def render_table(dx, dy, agg_mode, cfg):
     st.dataframe(tbl, use_container_width=True, height=min(600, 35 * 6 + 38))  # ~5 rows
 
     st.markdown("### Export")
-    col_e1, col_e2, col_e3 = st.columns(3)
+    col_e1, col_e2, col_e3, col_e4 = st.columns(4)
     with col_e1:
         st.download_button("⬇ CSV", export_csv(tbl),
                            "texturelab_results.csv", "text/csv")
@@ -714,6 +726,9 @@ def render_table(dx, dy, agg_mode, cfg):
             logs=st.session_state.get("logs", []))
         st.download_button("⬇ JSON", json_str,
                            "texturelab_report.json", "application/json")
+    with col_e4:
+        st.download_button("⬇ PDF", export_pdf_report(tbl, title=f"Report: {selected}"),
+                           "texturelab_report.pdf", "application/pdf")
 
     if len(fnames) > 1:
         st.markdown("---")
@@ -1249,6 +1264,31 @@ def page_compare():
     fnames = st.session_state["file_names"]
     st.markdown(f"**Files loaded:** {len(fnames)}")
 
+    if "chart_styles" not in st.session_state:
+        st.session_state["chart_styles"] = {}
+    
+    colors = px.colors.qualitative.Plotly
+    styles = st.session_state["chart_styles"]
+    
+    for i, fn in enumerate(fnames):
+        if fn not in styles:
+            styles[fn] = {
+                "color": colors[i % len(colors)],
+                "dash": "solid"
+            }
+
+    with st.expander("🎨 Chart Styling Options"):
+        st.markdown("Customize the colors and line styles for each pavement scan. These will be kept across all comparative charts.")
+        for fn in fnames:
+            cols = st.columns([3, 1, 1])
+            cols[0].write(f"**{fn}**")
+            new_color = cols[1].color_picker("Color", styles[fn]["color"], key=f"color_{fn}", label_visibility="collapsed")
+            new_dash = cols[2].selectbox("Line Type", ["solid", "dash", "dot", "dashdot"], 
+                                         index=["solid", "dash", "dot", "dashdot"].index(styles[fn]["dash"]), 
+                                         key=f"dash_{fn}", label_visibility="collapsed")
+            styles[fn]["color"] = new_color
+            styles[fn]["dash"] = new_dash
+
     # Side-by-side key metrics
     st.markdown("### Key Metrics Comparison")
     compare_params = st.multiselect(
@@ -1265,12 +1305,16 @@ def page_compare():
         st.dataframe(batch_tbl, use_container_width=True)
 
         # Bar chart comparison
+        color_map = {fn: styles[fn]["color"] for fn in fnames}
         for param in compare_params:
             vals = [st.session_state["aggregated"].get(fn, {}).get(param, 0)
                     for fn in fnames]
             fig = px.bar(x=fnames, y=vals, title=f"{param} comparison",
                          template="plotly_dark",
+                         color=fnames,
+                         color_discrete_map=color_map,
                          labels={"x": "File", "y": param})
+            fig.update_layout(showlegend=False)
             st.plotly_chart(fig, use_container_width=True)
 
     st.markdown("---")
@@ -1298,6 +1342,7 @@ def page_compare():
                 
                 fig = px.scatter(df_pca, x="PC1", y="PC2", color="File", text="File",
                                  title="Surfaces in PCA space",
+                                 color_discrete_map=color_map,
                                  template="plotly_dark", size_max=15)
                 fig.update_traces(textposition='top center', marker=dict(size=12))
                 st.plotly_chart(fig, use_container_width=True)
@@ -1331,7 +1376,8 @@ def page_compare():
                         x=1.0 / freqs[mask],  # Wavelength = 1 / spatial frequency
                         y=10 * np.log10(mean_psd[mask]),
                         mode='lines',
-                        name=fn
+                        name=fn,
+                        line=dict(color=styles[fn]["color"], dash=styles[fn]["dash"])
                     ))
                     
         if len(fig.data) > 0:
@@ -1368,7 +1414,8 @@ def page_compare():
                     fig.add_trace(go.Scatter(
                         x=mr, y=z_sub,
                         mode='lines',
-                        name=fn
+                        name=fn,
+                        line=dict(color=styles[fn]["color"], dash=styles[fn]["dash"])
                     ))
                     
         if len(fig.data) > 0:
@@ -1667,9 +1714,6 @@ elif page == "batch":
     page_batch()
 elif page == "compare":
     page_compare()
-elif page == "ai_assistant":
-    from pages.ai_assistant import page_ai_assistant
-    page_ai_assistant()
 elif page == "help":
     page_help()
 elif page == "about":

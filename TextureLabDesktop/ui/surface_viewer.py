@@ -132,12 +132,21 @@ class SurfaceViewer(QWidget):
         z_norm = np.clip((z_ds - levels[0]) / (levels[1] - levels[0]), 0, 1)
         colors = plt.get_cmap("viridis")(z_norm).astype(np.float32)
 
-        z_render = (z_ds - np.mean(z_ds)) * vert_exag
+        sx, sy = dy * step_y, dx * step_x
+        nx_ds_swap, ny_ds_swap = z_ds.shape[0], z_ds.shape[1]
+        
+        span_x = nx_ds_swap * sx
+        span_y = ny_ds_swap * sy
+        max_span = max(span_x, span_y)
+        z_span = max(1e-6, float(z_ds.max() - z_ds.min()))
+        
+        # Scale Z proportionally to max horizontal span for a balanced 3D view
+        z_render = ((z_ds - np.mean(z_ds)) / z_span) * (0.25 * max_span) * vert_exag
+
         self._surface_item = gl.GLSurfacePlotItem(
             z=z_render.T, colors=colors.transpose(1, 0, 2), shader='shaded', glOptions='opaque'
         )
         
-        sx, sy = dy * step_y, dx * step_x
         self._surface_item.scale(sx, sy, 1.0)
         nx_ds_swap, ny_ds_swap = z_ds.shape[0], z_ds.shape[1]
         self._surface_item.translate(-(nx_ds_swap * sx) / 2.0, 

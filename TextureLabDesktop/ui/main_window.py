@@ -25,7 +25,7 @@ class MainWindow(QMainWindow):
     """TextureLab Desktop main window."""
 
     APP_NAME = "TextureLab Desktop"
-    APP_VERSION = "2.0.0"
+    APP_VERSION = "2.1.0"
 
     def __init__(self):
         super().__init__()
@@ -69,6 +69,17 @@ class MainWindow(QMainWindow):
         batch_act.setShortcut(QKeySequence("Ctrl+Shift+O"))
         batch_act.triggered.connect(self._open_batch)
         file_menu.addAction(batch_act)
+
+        file_menu.addSeparator()
+
+        save_proj_act = QAction("💾 &Save Project…", self)
+        save_proj_act.setShortcut(QKeySequence.StandardKey.Save)
+        save_proj_act.triggered.connect(self._save_project)
+        file_menu.addAction(save_proj_act)
+
+        load_proj_act = QAction("📂 &Load Project…", self)
+        load_proj_act.triggered.connect(self._load_project)
+        file_menu.addAction(load_proj_act)
 
         file_menu.addSeparator()
 
@@ -138,6 +149,7 @@ class MainWindow(QMainWindow):
         # Connect rendering controls for real-time refresh
         self.settings_panel.vert_exag_slider.valueChanged.connect(self._refresh_viewer)
         self.settings_panel.robust_color.stateChanged.connect(self._refresh_viewer)
+        self.settings_panel.btn_rerun.clicked.connect(lambda: self._process_files(self._current_files) if self._current_files else None)
 
         self.setCentralWidget(central)
 
@@ -177,6 +189,44 @@ class MainWindow(QMainWindow):
             "Surface Files (*.csv *.txt *.laz *.las);;All Files (*)")
         if paths:
             self._process_files(paths)
+
+    def _save_project(self):
+        if not self._results:
+            QMessageBox.information(self, "No Data", "No project data to save.")
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Save Project", "", "TextureLab Project (*.tlp)")
+        if path:
+            import pickle
+            try:
+                with open(path, "wb") as f:
+                    pickle.dump({"results": self._results, "files": self._current_files}, f)
+                self.status_label.setText(f"Project saved to {path}")
+            except Exception as e:
+                QMessageBox.critical(self, "Save Error", str(e))
+
+    def _load_project(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Load Project", "", "TextureLab Project (*.tlp)")
+        if path:
+            import pickle
+            try:
+                with open(path, "rb") as f:
+                    data = pickle.load(f)
+                self._results = data.get("results")
+                self._current_files = data.get("files", [])
+                
+                if self._results and self._results.get("surfaces"):
+                    grid = self._results["surfaces"][0]
+                    self.surface_viewer.update_surface(
+                        grid.z,
+                        self.settings_panel.dx.value(),
+                        self.settings_panel.dy.value(),
+                        vert_exag=self.settings_panel.vert_exag,
+                        robust_color=self.settings_panel.robust_color.isChecked(),
+                    )
+                self.results_panel.set_results(self._results)
+                self.status_label.setText(f"Project loaded from {path}")
+            except Exception as e:
+                QMessageBox.critical(self, "Load Error", str(e))
 
     # ── Processing ────────────────────────────────────────────────
 

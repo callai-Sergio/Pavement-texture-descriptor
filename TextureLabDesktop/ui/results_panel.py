@@ -56,6 +56,9 @@ class ResultsPanel(QTabWidget):
         self.btn_excel = QPushButton("📊 Export Excel")
         self.btn_excel.clicked.connect(self._export_excel)
         btn_row.addWidget(self.btn_excel)
+        self.btn_pdf = QPushButton("📑 Export PDF")
+        self.btn_pdf.clicked.connect(self._export_pdf)
+        btn_row.addWidget(self.btn_pdf)
         summary_layout.addLayout(btn_row)
         self.addTab(self.summary_tab, "📋 Summary")
 
@@ -360,3 +363,47 @@ class ResultsPanel(QTabWidget):
                 agg["file"] = fn
                 rows.append(agg)
             pd.DataFrame(rows).to_excel(path, index=False)
+
+    def _export_pdf(self):
+        if not self._results:
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export PDF", "texturelab_results.pdf",
+            "PDF Files (*.pdf)")
+        if path:
+            try:
+                from fpdf import FPDF
+                pdf = FPDF()
+                pdf.add_page()
+                pdf.set_font("helvetica", 'B', 16)
+                pdf.cell(0, 10, "TextureLab Analysis Report", align='C', new_x="LMARGIN", new_y="NEXT")
+                pdf.ln(10)
+                
+                pdf.set_font("helvetica", 'B', 10)
+                cols = ["File", "MPD", "Ra", "Rq", "Rsk", "Sa", "Sdr"]
+                col_widths = [60] + [22] * (len(cols) - 1)
+                
+                for i, col in enumerate(cols):
+                    pdf.cell(col_widths[i], 10, col, border=1, align='C')
+                pdf.ln(10)
+                
+                pdf.set_font("helvetica", '', 10)
+                for fn in self._results["file_names"]:
+                    agg = self._results["aggregated"].get(fn, {})
+                    areal = self._results["results_areal"].get(fn, {})
+                    merged = {**agg, **areal}
+                    pdf.cell(col_widths[0], 10, fn[:30], border=1)
+                    for i, col in enumerate(cols[1:], 1):
+                        val = merged.get(col, "")
+                        if isinstance(val, (float, int)):
+                            val = f"{val:.3f}" if abs(val) < 100 else f"{val:.1f}"
+                        pdf.cell(col_widths[i], 10, str(val), border=1, align='C')
+                    pdf.ln(10)
+                
+                pdf.output(path)
+            except ImportError:
+                from PyQt6.QtWidgets import QMessageBox
+                QMessageBox.warning(self, "Export Error", "fpdf2 library is not installed.")
+            except Exception as e:
+                from PyQt6.QtWidgets import QMessageBox
+                QMessageBox.critical(self, "Export Error", f"Failed to export PDF:\n{e}")
