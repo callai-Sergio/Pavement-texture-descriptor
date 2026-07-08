@@ -711,7 +711,7 @@ def render_table(dx, dy, agg_mode, cfg):
     st.dataframe(tbl, use_container_width=True, height=min(600, 35 * 6 + 38))  # ~5 rows
 
     st.markdown("### Export")
-    col_e1, col_e2, col_e3, col_e4 = st.columns(4)
+    col_e1, col_e2, col_e3 = st.columns(3)
     with col_e1:
         st.download_button("⬇ CSV", export_csv(tbl),
                            "texturelab_results.csv", "text/csv")
@@ -726,14 +726,12 @@ def render_table(dx, dy, agg_mode, cfg):
             logs=st.session_state.get("logs", []))
         st.download_button("⬇ JSON", json_str,
                            "texturelab_report.json", "application/json")
-    with col_e4:
-        st.download_button("⬇ PDF", export_pdf_report(tbl, title=f"Report: {selected}"),
-                           "texturelab_report.pdf", "application/pdf")
 
     if len(fnames) > 1:
         st.markdown("---")
         st.markdown("### 📊 Batch Comparison")
-        batch_tbl = build_batch_table(st.session_state["batch_agg"], fnames)
+        areal_list = [st.session_state["results_areal"].get(fn, {}) for fn in fnames]
+        batch_tbl = build_batch_table(st.session_state["batch_agg"], fnames, areal_results=areal_list)
         
         # Start index at 1 instead of 0
         batch_tbl.index = np.arange(1, len(batch_tbl) + 1)
@@ -756,8 +754,15 @@ def render_table(dx, dy, agg_mode, cfg):
         display_tbl = batch_tbl[["File"] + sel_cols]
         
         st.dataframe(display_tbl, use_container_width=True)
-        st.download_button("⬇ Batch CSV", export_csv(batch_tbl),
-                           "texturelab_batch.csv", "text/csv")
+        
+        st.markdown("#### Export Batch Table")
+        col_be1, col_be2 = st.columns(2)
+        with col_be1:
+            st.download_button("⬇ Batch CSV", export_csv(batch_tbl),
+                               "texturelab_batch.csv", "text/csv")
+        with col_be2:
+            st.download_button("⬇ Batch Excel", export_excel(batch_tbl),
+                               "texturelab_batch.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 def render_visualization():
@@ -1300,9 +1305,18 @@ def page_compare():
         key="compare_params")
 
     if compare_params:
+        areal_list = [st.session_state["results_areal"].get(fn, {}) for fn in fnames]
         batch_tbl = build_batch_table(
-            st.session_state["batch_agg"], fnames, compare_params)
+            st.session_state["batch_agg"], fnames, compare_params, areal_results=areal_list)
         st.dataframe(batch_tbl, use_container_width=True)
+        
+        # Batch Export
+        st.markdown("#### Export Batch Table")
+        col_be1, col_be2 = st.columns(2)
+        with col_be1:
+            st.download_button("⬇ Batch CSV", export_csv(batch_tbl), "batch_results.csv", "text/csv")
+        with col_be2:
+            st.download_button("⬇ Export Excel", export_excel(batch_tbl), "compare_results.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key="btn_xl_comp")
 
         # Bar chart comparison
         color_map = {fn: styles[fn]["color"] for fn in fnames}
@@ -1327,8 +1341,9 @@ def page_compare():
         st.markdown("### Principal Component Analysis (Batch)")
         st.markdown("Automatically clusters the analysed files in 2D space based on their parameters to find similar surfaces.")
         
-        batch_tbl = build_batch_table(st.session_state["batch_agg"], fnames)
-        num_cols = batch_tbl.select_dtypes(include="number").columns.tolist()
+        areal_list = [st.session_state["results_areal"].get(fn, {}) for fn in fnames]
+        batch_tbl_pca = build_batch_table(st.session_state["batch_agg"], fnames, areal_results=areal_list)
+        num_cols = batch_tbl_pca.select_dtypes(include="number").columns.tolist()
         pca_feats = st.multiselect("Features for PCA", num_cols,
                                    default=[c for c in num_cols if c in 
                                             ["MPD", "Ra", "Rq", "Rsk", "Rku", "Rk", "Sa", "Sdr", "MeanSlope"]], 
@@ -1356,12 +1371,12 @@ def page_compare():
         st.markdown("Compares the wavelength distribution of the surfaces. Data is averaged over all extracted profiles per file.")
         
         dx = st.session_state.get("s_dx", 1.0)
+        smooth_psd = st.toggle("Smooth (1/3 Octave Bands)", value=True)
         
         fig = go.Figure()
         for fn in fnames:
             profs = st.session_state["profiles"].get(fn, [])
             if profs:
-                # Calculate mean PSD across all profiles
                 psds = []
                 freqs = None
                 for p in profs:
@@ -1371,25 +1386,36 @@ def page_compare():
                 
                 if freqs is not None and len(psds) > 0:
                     mean_psd = np.mean(psds, axis=0)
-                    mask = freqs > 0
-                    fig.add_trace(go.Scatter(
-                        x=1.0 / freqs[mask],  # Wavelength = 1 / spatial frequency
-                        y=10 * np.log10(mean_psd[mask]),
-                        mode='lines',
-                        name=fn,
-                        line=dict(color=styles[fn]["color"], dash=styles[fn]["dash"])
-                    ))
+                    
+                    if smooth_psd:
+                        from src.descriptors import octave_band_rms
+                        bands = octave_band_rms(freqs, mean_psd, n_octave=3)
+                        if bands:
+                            wls = [1.0 / float(fc) for fc in bands.keys() if float(fc) > 0]
+                            rms_db = [20 * np.log10(v + 1e-15) for v in bands.values()]
+                            wls, rms_db = zip(*sorted(zip(wls, rms_db)))
+                            fig.add_trace(go.Scatter(
+                                x=wls, y=rms_db, mode='lines+markers', name=fn,
+                                line=dict(color=styles[fn]["color"], dash=styles[fn]["dash"], shape='spline')
+                            ))
+                    else:
+                        mask = freqs > 0
+                        fig.add_trace(go.Scatter(
+                            x=1.0 / freqs[mask],
+                            y=10 * np.log10(mean_psd[mask] + 1e-15),
+                            mode='lines',
+                            name=fn,
+                            line=dict(color=styles[fn]["color"], dash=styles[fn]["dash"])
+                        ))
                     
         if len(fig.data) > 0:
             fig.update_layout(
                 template="plotly_dark",
                 xaxis_title="Wavelength λ (mm)",
-                yaxis_title="Power Spectral Density (dB re 1 mm³)",
+                yaxis_title="1/3 Octave Band RMS (dB re 1 mm)" if smooth_psd else "Power Spectral Density (dB re 1 mm³)",
                 xaxis_type="log",
                 hovermode="x unified"
             )
-            # Reverse X axis so larger wavelengths are on the right/left depending on convention
-            # ISO convention usually has larger wavelengths on the left or logs. We'll leave it ascending.
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.warning("No profile data available for PSD.")
@@ -1398,36 +1424,83 @@ def page_compare():
         st.markdown("### Abbott-Firestone Curve (Bearing Area)")
         st.markdown("Shows the cumulative height distribution (Material Ratio) of the surfaces.")
         
-        fig = go.Figure()
-        for fn in fnames:
+        layout_mode = st.radio("Layout Mode", ["Combined (Single Chart)", "Separate Subplots", "Group by Prefix"], horizontal=True)
+        prefix_len = 7
+        if layout_mode == "Group by Prefix":
+            prefix_len = st.number_input("Number of characters to define group prefix", min_value=1, max_value=50, value=7)
+            
+        def _get_abbott_data(fn):
             grid_obj = [s for s, name in zip(st.session_state["surfaces"], fnames) if name == fn]
-            if grid_obj:
-                z = grid_obj[0].z
-                z_valid = z[np.isfinite(z)]
-                if len(z_valid) > 0:
-                    z_sorted = np.sort(z_valid)[::-1]
-                    # Subsample for plot performance
-                    step = max(1, len(z_sorted) // 1000)
-                    z_sub = z_sorted[::step]
-                    mr = np.linspace(0, 100, len(z_sub))
+            if not grid_obj: return None
+            z = grid_obj[0].z
+            z_valid = z[np.isfinite(z)]
+            if len(z_valid) == 0: return None
+            z_sorted = np.sort(z_valid)[::-1]
+            step = max(1, len(z_sorted) // 1000)
+            z_sub = z_sorted[::step]
+            mr = np.linspace(0, 100, len(z_sub))
+            return mr, z_sub
+            
+        if layout_mode == "Combined (Single Chart)":
+            fig = go.Figure()
+            for fn in fnames:
+                data = _get_abbott_data(fn)
+                if data:
+                    mr, z_sub = data
+                    fig.add_trace(go.Scatter(x=mr, y=z_sub, mode='lines', name=fn, line=dict(color=styles[fn]["color"], dash=styles[fn]["dash"])))
+            if len(fig.data) > 0:
+                fig.update_layout(template="plotly_dark", xaxis_title="Material Ratio (%)", yaxis_title=f"Height ({st.session_state.get('s_uz', 'units')})", hovermode="x unified")
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.warning("No surface data available.")
+                
+        elif layout_mode == "Separate Subplots":
+            for fn in fnames:
+                data = _get_abbott_data(fn)
+                if data:
+                    mr, z_sub = data
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(x=mr, y=z_sub, mode='lines', name=fn, line=dict(color=styles[fn]["color"], dash=styles[fn]["dash"])))
+                    fig.update_layout(title=fn, template="plotly_dark", xaxis_title="Material Ratio (%)", yaxis_title=f"Height ({st.session_state.get('s_uz', 'units')})", hovermode="x unified", height=400)
                     
-                    fig.add_trace(go.Scatter(
-                        x=mr, y=z_sub,
-                        mode='lines',
-                        name=fn,
-                        line=dict(color=styles[fn]["color"], dash=styles[fn]["dash"])
-                    ))
-                    
-        if len(fig.data) > 0:
-            fig.update_layout(
-                template="plotly_dark",
-                xaxis_title="Material Ratio (%)",
-                yaxis_title=f"Height ({st.session_state.get('s_uz', 'units')})",
-                hovermode="x unified"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("No surface data available.")
+                    col_p, col_t = st.columns([3, 1])
+                    with col_p:
+                        st.plotly_chart(fig, use_container_width=True)
+                    with col_t:
+                        st.markdown("<br><br>", unsafe_allow_html=True)
+                        st.markdown("**Parameters:**")
+                        agg = st.session_state["aggregated"].get(fn, {})
+                        params = {"Parameter": [], "Value": []}
+                        for k in ["Rk", "Rpk", "Rvk", "Mr1", "Mr2"]:
+                            val = agg.get(k)
+                            params["Parameter"].append(k)
+                            params["Value"].append(f"{val:.3f}" if isinstance(val, (int, float)) else "-")
+                        st.dataframe(pd.DataFrame(params), hide_index=True, use_container_width=True)
+                        
+        elif layout_mode == "Group by Prefix":
+            fig = go.Figure()
+            groups = {}
+            for fn in fnames:
+                pfx = fn[:prefix_len]
+                if pfx not in groups: groups[pfx] = []
+                groups[pfx].append(fn)
+                
+            for idx, (pfx, fn_list) in enumerate(groups.items()):
+                mr_std = np.linspace(0, 100, 1000)
+                z_interp = []
+                for fn in fn_list:
+                    d = _get_abbott_data(fn)
+                    if d:
+                        z_interp.append(np.interp(mr_std, d[0], d[1]))
+                if z_interp:
+                    z_mean = np.mean(z_interp, axis=0)
+                    color = px.colors.qualitative.Plotly[idx % len(px.colors.qualitative.Plotly)]
+                    fig.add_trace(go.Scatter(x=mr_std, y=z_mean, mode='lines', name=f"{pfx}* (n={len(z_interp)})", line=dict(color=color, dash="solid")))
+            if len(fig.data) > 0:
+                fig.update_layout(template="plotly_dark", xaxis_title="Material Ratio (%)", yaxis_title=f"Mean Height ({st.session_state.get('s_uz', 'units')})", hovermode="x unified")
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.warning("No surface data available.")
 
     with tab_3d:
         st.markdown("### 🧊 3D Surfaces Gallery")

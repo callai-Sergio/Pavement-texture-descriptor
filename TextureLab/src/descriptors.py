@@ -651,7 +651,9 @@ def aggregate_profiles(per_profile: List[dict],
     """Aggregate per-profile results into a summary row."""
     if not per_profile:
         return {}
-    keys = per_profile[0].keys()
+    keys = set()
+    for p in per_profile:
+        keys.update(p.keys())
     agg: dict = {}
     for k in keys:
         vals = [p[k] for p in per_profile
