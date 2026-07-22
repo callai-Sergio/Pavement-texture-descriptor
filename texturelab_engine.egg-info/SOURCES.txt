@@ -1,0 +1,7 @@
+README.md
+pyproject.toml
+texturelab_engine.egg-info/PKG-INFO
+texturelab_engine.egg-info/SOURCES.txt
+texturelab_engine.egg-info/dependency_links.txt
+texturelab_engine.egg-info/requires.txt
+texturelab_engine.egg-info/top_level.txt

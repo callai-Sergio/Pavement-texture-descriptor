@@ -66,6 +66,9 @@ def main():
     
     url = f"http://localhost:{port}"
     
+    # Enable downloads for Streamlit download buttons
+    webview.settings['ALLOW_DOWNLOADS'] = True
+    
     # Create the webview window
     webview.create_window(
         title="TextureLab Desktop",

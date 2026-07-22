@@ -22,6 +22,7 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 
 from engine.analytics import run_pca, prepare_feature_matrix, correlation_pruning
+from .workers import PCAWorker, FeatureSelectionWorker
 
 
 class ResultsPanel(QTabWidget):
@@ -57,6 +58,11 @@ class ResultsPanel(QTabWidget):
         self.btn_excel.clicked.connect(self._export_excel)
         btn_row.addWidget(self.btn_excel)
         self.btn_pdf = QPushButton("📑 Export PDF")
+        try:
+            import fpdf
+        except ImportError:
+            self.btn_pdf.setDisabled(True)
+            self.btn_pdf.setToolTip("Please install fpdf2 library to export to PDF")
         self.btn_pdf.clicked.connect(self._export_pdf)
         btn_row.addWidget(self.btn_pdf)
         summary_layout.addLayout(btn_row)
@@ -266,8 +272,24 @@ class ResultsPanel(QTabWidget):
         num_cols = sorted(df.select_dtypes(include="number").columns.tolist())
         n_comp = min(self.pca_n.value(), len(num_cols), len(df))
 
-        scores, loadings, explained, feat_names = run_pca(
-            df, num_cols, n_comp)
+        self.pca_run_btn.setText("⏳ Running...")
+        self.pca_run_btn.setDisabled(True)
+
+        self._pca_worker = PCAWorker(df, num_cols, n_comp)
+        self._pca_worker.finished.connect(self._on_pca_finished)
+        self._pca_worker.error.connect(self._on_pca_error)
+        self._pca_worker.start()
+
+    def _on_pca_error(self, err: str):
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.critical(self, "PCA Error", err)
+        self.pca_run_btn.setText("▶ Run PCA")
+        self.pca_run_btn.setDisabled(False)
+
+    def _on_pca_finished(self, res):
+        self.pca_run_btn.setText("▶ Run PCA")
+        self.pca_run_btn.setDisabled(False)
+        scores, loadings, explained, feat_names = res
 
         fig = self.pca_canvas.figure
         fig.clear()
@@ -325,9 +347,26 @@ class ResultsPanel(QTabWidget):
             return
 
         df = pd.DataFrame(all_rows)
-        kept = correlation_pruning(df, threshold=0.95)
-        all_cols = sorted(df.select_dtypes(include="number").columns.tolist())
+        self.feat_run_btn.setText("⏳ Running...")
+        self.feat_run_btn.setDisabled(True)
 
+        self._all_cols_for_feat = sorted(df.select_dtypes(include="number").columns.tolist())
+        self._feat_worker = FeatureSelectionWorker(df)
+        self._feat_worker.finished.connect(self._on_feat_finished)
+        self._feat_worker.error.connect(self._on_feat_error)
+        self._feat_worker.start()
+
+    def _on_feat_error(self, err: str):
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.critical(self, "Feature Selection Error", err)
+        self.feat_run_btn.setText("▶ Run Correlation Pruning")
+        self.feat_run_btn.setDisabled(False)
+
+    def _on_feat_finished(self, kept):
+        self.feat_run_btn.setText("▶ Run Correlation Pruning")
+        self.feat_run_btn.setDisabled(False)
+
+        all_cols = getattr(self, "_all_cols_for_feat", [])
         self.feat_table.setRowCount(len(all_cols))
         for i, col in enumerate(all_cols):
             self.feat_table.setItem(i, 0, QTableWidgetItem(col))

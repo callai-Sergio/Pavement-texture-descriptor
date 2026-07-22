@@ -316,6 +316,7 @@ def calc_core_stats_3d(z: np.ndarray, dx: float = 1.0,
     ssk = np.mean(zc ** 3) / sq ** 3 if sq > 0 else 0.0
     sku = np.mean(zc ** 4) / sq ** 4 if sq > 0 else 0.0
     vv, vm = calc_void_material_volume(z)
+    abbott_3d = calc_rk_params(vals)
     result = {
         "Sa": float(np.mean(np.abs(zc))),
         "Sq": float(sq),
@@ -326,6 +327,11 @@ def calc_core_stats_3d(z: np.ndarray, dx: float = 1.0,
         "Sdr": calc_sdr(z, dx, dy),
         "Vv": vv,
         "Vm": vm,
+        "Sk": abbott_3d.get("Rk", 0.0),
+        "Spk": abbott_3d.get("Rpk", 0.0),
+        "Svk": abbott_3d.get("Rvk", 0.0),
+        "SMr1": abbott_3d.get("Mr1", 0.0),
+        "SMr2": abbott_3d.get("Mr2", 0.0),
     }
     return result
 
@@ -617,6 +623,7 @@ def compute_profile_params(profile: np.ndarray, dx: float) -> dict:
     results["PSD_m1"] = spectral["PSD_m1"]
     results["PSD_m2"] = spectral["PSD_m2"]
     results["PSD_mean_freq"] = spectral["PSD_mean_freq"]
+    results["OctaveBands"] = spectral["OctaveBands"]
 
     results["MeanSlope"] = calc_mean_slope(profile, dx)
     results["PeakDensity"] = calc_peak_density(profile, dx)
@@ -656,6 +663,8 @@ def aggregate_profiles(per_profile: List[dict],
         keys.update(p.keys())
     agg: dict = {}
     for k in keys:
+        if k == "OctaveBands":
+            continue
         vals = [p[k] for p in per_profile
                 if isinstance(p.get(k), (int, float))]
         if not vals:
@@ -673,4 +682,24 @@ def aggregate_profiles(per_profile: List[dict],
         agg[f"{k}_std"] = float(np.std(arr))
         agg[f"{k}_P10"] = float(np.percentile(arr, 10))
         agg[f"{k}_P90"] = float(np.percentile(arr, 90))
+
+    # Aggregate OctaveBands if available
+    all_bands = [p["OctaveBands"] for p in per_profile if "OctaveBands" in p]
+    if all_bands:
+        agg["OctaveBands"] = {}
+        band_keys = set()
+        for b in all_bands:
+            band_keys.update(b.keys())
+        for bk in band_keys:
+            vals = [b[bk] for b in all_bands if bk in b]
+            if mode == "mean":
+                agg["OctaveBands"][bk] = float(np.mean(vals))
+            elif mode == "median":
+                agg["OctaveBands"][bk] = float(np.median(vals))
+            elif mode == "trimmed_mean":
+                from scipy.stats import trim_mean
+                agg["OctaveBands"][bk] = float(trim_mean(vals, 0.1))
+            else:
+                agg["OctaveBands"][bk] = float(np.mean(vals))
+
     return agg

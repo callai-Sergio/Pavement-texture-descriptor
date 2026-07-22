@@ -39,6 +39,7 @@ from components.visualizer import (
     histogram, boxplot, heatmap_2d, surface_3d, scatter_2d, scatter_3d,
     pair_plot, correlation_heatmap, pca_variance_plot, pca_biplot,
     elbow_plot, residual_plot, actual_vs_predicted, feature_importance_plot,
+    texture_spectrum_plot,
 )
 from components.export_manager import (
     build_results_table, build_batch_table,
@@ -568,7 +569,11 @@ def process_files(uploaded_files, dx, dy, units_xy, units_z,
             batch_agg.append(agg)
 
         except Exception as e:
+            import traceback
+            tb_str = traceback.format_exc()
             _log(f"  ❌ Error: {e}")
+            for line in tb_str.strip().split('\n'):
+                _log(f"      {line}")
             st.error(f"Error processing {f.name}: {e}")
         finally:
             os.unlink(tmp.name)
@@ -579,8 +584,19 @@ def process_files(uploaded_files, dx, dy, units_xy, units_z,
     st.session_state["warnings"] = all_warnings
     st.session_state["processed"] = True
     progress.progress(1.0, text="Done ✅")
+    
+    total = len(uploaded_files)
+    success = len(file_names)
+    failed = total - success
+    success_rate = (success / total) * 100 if total > 0 else 0
+    
     _log("🎉 Analysis complete.")
-    st.success(f"Processed {len(file_names)} file(s) successfully!")
+    _log(f"📊 Summary: {success} processed, {failed} failed ({success_rate:.1f}% success rate)")
+    
+    if failed > 0:
+        st.warning(f"Processed {success}/{total} file(s) successfully ({success_rate:.1f}%). Check logs for {failed} failure(s).")
+    else:
+        st.success(f"Processed {success}/{total} file(s) successfully (100%)!")
 
 
 # ===================================================================
@@ -763,14 +779,8 @@ def render_table(dx, dy, agg_mode, cfg):
         all_cols = batch_tbl.columns.tolist()
         all_cols.remove("File")  # We always want to show File
         
-        default_cols = [
-            "MPD", "Ra", "Rq", "Rsk", "Rku", "Rk", "Rpk", "Rvk", 
-            "Sa", "Sq", "Sdr", "MeanSlope", "PeakDensity"
-        ]
-        default_cols = [c for c in default_cols if c in all_cols]
-        
         sel_cols = st.multiselect(
-            "Select parameters to display", all_cols, default=default_cols,
+            "Select parameters to display", all_cols, default=all_cols,
             key="batch_cols"
         )
         
@@ -786,6 +796,62 @@ def render_table(dx, dy, agg_mode, cfg):
         with col_be2:
             st.download_button("⬇ Batch Excel", export_excel(batch_tbl),
                                "texturelab_batch.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                               
+        st.markdown("---")
+        st.markdown("### 📊 By Pavement Type (Aggregated)")
+        st.caption("Group files by their prefix to compare pavement types.")
+        prefix_len = st.slider("Prefix length to define pavement type (e.g. A1_MALA is 7)", 2, 30, 7, key="tbl_prefix_len")
+        
+        batch_tbl_type = batch_tbl.copy()
+        batch_tbl_type["Pavement Type"] = batch_tbl_type["File"].apply(lambda x: x[:prefix_len])
+        numeric_cols = batch_tbl_type.select_dtypes(include=np.number).columns.tolist()
+        if "File" in numeric_cols:
+            numeric_cols.remove("File")
+            
+        if len(numeric_cols) > 0:
+            mean_df = batch_tbl_type.groupby("Pavement Type")[numeric_cols].mean().reset_index()
+            std_df = batch_tbl_type.groupby("Pavement Type")[numeric_cols].std().reset_index()
+            
+            st.markdown("#### Mean Values")
+            st.dataframe(mean_df, use_container_width=True)
+            st.markdown("#### Standard Deviation")
+            st.dataframe(std_df, use_container_width=True)
+            
+            col_m1, col_m2 = st.columns(2)
+            with col_m1:
+                st.download_button("⬇ Download Mean CSV", export_csv(mean_df), "pavement_mean.csv", "text/csv")
+            with col_m2:
+                st.download_button("⬇ Download Mean Excel", export_excel(mean_df), "pavement_mean.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                
+            st.markdown("#### Texture Level Spectrum")
+            # Extract OctaveBands from batch_agg
+            spectrum_data = {}
+            for fn, agg_data in zip(fnames, st.session_state["batch_agg"]):
+                p_type = fn[:prefix_len]
+                if "OctaveBands" in agg_data:
+                    if p_type not in spectrum_data:
+                        spectrum_data[p_type] = []
+                    spectrum_data[p_type].append(agg_data["OctaveBands"])
+            
+            # Average the bands per pavement type
+            mean_spectrum_by_type = {}
+            for p_type, bands_list in spectrum_data.items():
+                if not bands_list:
+                    continue
+                mean_bands = {}
+                band_keys = set()
+                for b in bands_list:
+                    band_keys.update(b.keys())
+                for bk in band_keys:
+                    vals = [b[bk] for b in bands_list if bk in b]
+                    mean_bands[bk] = np.mean(vals)
+                mean_spectrum_by_type[p_type] = mean_bands
+                
+            if mean_spectrum_by_type:
+                fig_spectrum = texture_spectrum_plot(mean_spectrum_by_type)
+                st.plotly_chart(fig_spectrum, use_container_width=True)
+            else:
+                st.info("No spectral data available to plot Texture Level Spectrum.")
 
 
 def render_visualization():
@@ -1495,15 +1561,15 @@ def page_compare():
                     
                     fig = go.Figure()
                     
-                    # Rk Tangent Line (Blue)
+                    # Rk Tangent Line (Inclination)
                     m = (z_bottom - z_top) / (mr2 - mr1) if mr2 > mr1 else 0
                     z_at_0 = z_top - m * mr1
                     z_at_100 = z_bottom + m * (100 - mr2)
                     
                     fig.add_trace(go.Scatter(
                         x=[0, 100], y=[z_at_0, z_at_100],
-                        mode='lines', name='Rk Tangent',
-                        line=dict(color='blue', dash='solid', width=1)
+                        mode='lines', name='Core Inclination (Rk Tangent)',
+                        line=dict(color='cyan', dash='dash', width=2)
                     ))
                     
                     # Rpk Triangle Area
@@ -1564,18 +1630,42 @@ def page_compare():
                         st.markdown("**Parameters (Profile Avg):**")
                         agg = st.session_state["aggregated"].get(fn, {})
                         params = {"Parameter": [], "Value": []}
+                        rk_val = agg.get("Rk")
+                        mr1_val = agg.get("Mr1")
+                        mr2_val = agg.get("Mr2")
+                        
                         for k in ["Rk", "Rpk", "Rvk", "Mr1", "Mr2"]:
                             val = agg.get(k)
                             params["Parameter"].append(k)
                             params["Value"].append(f"{val:.3f}" if isinstance(val, (int, float)) else "-")
+                            
+                        if rk_val is not None and mr1_val is not None and mr2_val is not None and (mr2_val - mr1_val) > 0:
+                            slope = rk_val / (mr2_val - mr1_val)
+                            params["Parameter"].append("Slope (Rk/ΔMr)")
+                            params["Value"].append(f"{slope:.4f}")
+                            params["Parameter"].append("Slope (%)")
+                            params["Value"].append(f"{slope * 100:.2f}%")
+                            
                         st.dataframe(pd.DataFrame(params), hide_index=True, use_container_width=True)
                         
                         st.markdown("**Parameters (Surface):**")
                         params_surf = {"Parameter": [], "Value": []}
+                        sk_val = params_3d.get("Rk")
+                        smr1_val = params_3d.get("Mr1")
+                        smr2_val = params_3d.get("Mr2")
+                        
                         for k in ["Rk", "Rpk", "Rvk", "Mr1", "Mr2"]:
                             val = params_3d.get(k)
                             params_surf["Parameter"].append(k.replace("R", "S"))
                             params_surf["Value"].append(f"{val:.3f}" if isinstance(val, (int, float)) else "-")
+                            
+                        if sk_val is not None and smr1_val is not None and smr2_val is not None and (smr2_val - smr1_val) > 0:
+                            slope_surf = sk_val / (smr2_val - smr1_val)
+                            params_surf["Parameter"].append("Slope (Sk/ΔSMr)")
+                            params_surf["Value"].append(f"{slope_surf:.4f}")
+                            params_surf["Parameter"].append("Slope (%)")
+                            params_surf["Value"].append(f"{slope_surf * 100:.2f}%")
+                            
                         st.dataframe(pd.DataFrame(params_surf), hide_index=True, use_container_width=True)
         elif layout_mode == "Group by Prefix":
             fig = go.Figure()
@@ -1612,14 +1702,38 @@ def page_compare():
                 export_dict[fn] = np.interp(mr_std, data[0], data[1])
         if len(export_dict) > 1:
             df_export = pd.DataFrame(export_dict)
-            from components.export_manager import export_csv, export_excel
             col_exp1, col_exp2 = st.columns(2)
             with col_exp1:
                 st.download_button("⬇ Download CSV", export_csv(df_export),
                                    "abbott_curves.csv", "text/csv")
             with col_exp2:
                 st.download_button("⬇ Download Excel", export_excel(df_export),
-                                   "abbott_curves.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                                   "abbott_curves.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key="btn_xl_abb_c")
+
+        st.markdown("#### Export Abbott Parameters")
+        abbott_params = {"File": []}
+        prof_keys = ["Rk", "Rpk", "Rvk", "Mr1", "Mr2"]
+        surf_keys = ["Rk", "Rpk", "Rvk", "Mr1", "Mr2"]
+        for k in prof_keys:
+            abbott_params[f"Profile_{k}"] = []
+        for k in surf_keys:
+            abbott_params[f"Surface_{k.replace('R', 'S')}"] = []
+            
+        for fn in fnames:
+            abbott_params["File"].append(fn)
+            agg = st.session_state["aggregated"].get(fn, {})
+            params_3d = st.session_state["results_areal"].get(fn, {})
+            for k in prof_keys:
+                abbott_params[f"Profile_{k}"].append(agg.get(k, None))
+            for k in surf_keys:
+                abbott_params[f"Surface_{k.replace('R', 'S')}"].append(params_3d.get(k.replace('R', 'S'), None))
+                
+        df_params = pd.DataFrame(abbott_params)
+        col_p1, col_p2 = st.columns(2)
+        with col_p1:
+            st.download_button("⬇ Download Params CSV", export_csv(df_params), "abbott_params.csv", "text/csv", key="btn_csv_abb_p")
+        with col_p2:
+            st.download_button("⬇ Download Params Excel", export_excel(df_params), "abbott_params.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key="btn_xl_abb_p")
 
     with tab_3d:
         st.markdown("### 🧊 3D Surfaces Gallery")
