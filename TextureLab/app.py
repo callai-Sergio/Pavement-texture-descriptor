@@ -50,7 +50,7 @@ from components.project_manager import export_project, load_project
 # ===================================================================
 # Constants
 # ===================================================================
-APP_VERSION = "1.3.0"
+APP_VERSION = "2.3.0"
 APP_AUTHOR = "Sergio Callai"
 APP_YEAR = "2025"
 
@@ -62,7 +62,7 @@ st.set_page_config(
     page_title="TextureLab",
     page_icon="🔬",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="auto",
 )
 
 # ── Custom CSS ────────────────────────────────────────────────────────────
@@ -1668,7 +1668,6 @@ def page_compare():
                             
                         st.dataframe(pd.DataFrame(params_surf), hide_index=True, use_container_width=True)
         elif layout_mode == "Group by Prefix":
-            fig = go.Figure()
             groups = {}
             for fn in fnames:
                 pfx = fn[:prefix_len]
@@ -1678,19 +1677,51 @@ def page_compare():
             for idx, (pfx, fn_list) in enumerate(groups.items()):
                 mr_std = np.linspace(0, 100, 1000)
                 z_interp = []
+                group_params = {"Rk": [], "Rpk": [], "Rvk": [], "Mr1": [], "Mr2": []}
                 for fn in fn_list:
                     d = _get_abbott_data(fn)
                     if d:
                         z_interp.append(np.interp(mr_std, d[0], d[1]))
+                    agg = st.session_state["aggregated"].get(fn, {})
+                    for k in group_params.keys():
+                        v = agg.get(k)
+                        if v is not None:
+                            group_params[k].append(v)
+                            
                 if z_interp:
                     z_mean = np.mean(z_interp, axis=0)
                     color = px.colors.qualitative.Plotly[idx % len(px.colors.qualitative.Plotly)]
+                    
+                    fig = go.Figure()
                     fig.add_trace(go.Scatter(x=mr_std, y=z_mean, mode='lines', name=f"{pfx}* (n={len(z_interp)})", line=dict(color=color, dash="solid")))
-            if len(fig.data) > 0:
-                fig.update_layout(template="plotly_dark", xaxis_title="Material Ratio (%)", yaxis_title=f"Mean Height ({st.session_state.get('s_uz', 'units')})", hovermode="x unified")
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.warning("No surface data available.")
+                    fig.update_layout(title=f"Prefix: {pfx}* (n={len(z_interp)})", template="plotly_dark", xaxis_title="Material Ratio (%)", yaxis_title=f"Mean Height ({st.session_state.get('s_uz', 'units')})", hovermode="x unified", height=400)
+                    
+                    col_p, col_t = st.columns([3, 1])
+                    with col_p:
+                        st.plotly_chart(fig, use_container_width=True)
+                    with col_t:
+                        st.markdown("<br><br>", unsafe_allow_html=True)
+                        st.markdown(f"**Mean Params ({pfx}*):**")
+                        params = {"Parameter": [], "Mean Value": []}
+                        
+                        rk_val = np.mean(group_params["Rk"]) if group_params["Rk"] else None
+                        mr1_val = np.mean(group_params["Mr1"]) if group_params["Mr1"] else None
+                        mr2_val = np.mean(group_params["Mr2"]) if group_params["Mr2"] else None
+                        
+                        for k in ["Rk", "Rpk", "Rvk", "Mr1", "Mr2"]:
+                            val_list = group_params[k]
+                            mean_val = np.mean(val_list) if val_list else None
+                            params["Parameter"].append(k)
+                            params["Mean Value"].append(f"{mean_val:.3f}" if mean_val is not None else "-")
+                            
+                        if rk_val is not None and mr1_val is not None and mr2_val is not None and (mr2_val - mr1_val) > 0:
+                            slope = rk_val / (mr2_val - mr1_val)
+                            params["Parameter"].append("Slope (Rk/ΔMr)")
+                            params["Mean Value"].append(f"{slope:.4f}")
+                            
+                        st.dataframe(pd.DataFrame(params), hide_index=True, use_container_width=True)
+                else:
+                    st.warning(f"No surface data available for prefix {pfx}*.")
 
         st.markdown("---")
         st.markdown("#### Export Curve Data")
@@ -1816,9 +1847,6 @@ def page_help():
             "Dim": meta.dim,
             "Standard": meta.standard,
             "Unit": meta.unit,
-            "Noise": meta.noise,
-            "Friction": meta.friction,
-            "Drainage": meta.drainage,
         })
     ref_df = pd.DataFrame(ref_rows)
     
@@ -1833,7 +1861,7 @@ def page_help():
             ),
             "ID": None, # Hide internal ID column
         },
-        disabled=["Parameter", "Definition", "Dim", "Standard", "Unit", "Noise", "Friction", "Drainage"],
+        disabled=["Parameter", "Definition", "Dim", "Standard", "Unit"],
         hide_index=True,
         use_container_width=True,
         height=600,

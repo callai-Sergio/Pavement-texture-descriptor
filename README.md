@@ -4,7 +4,7 @@ A project to evaluate and analyze pavement textures via the **TextureLab** Strea
 
 ## 🔬 Features & Analysis Pipeline
 
-**TextureLab v1.3.0** provides a comprehensive pipeline for evaluating 3D pavement scans (LAZ/LAS/CSV/TXT) by extracting ISO-standard descriptors across multiple profiles:
+**TextureLab v2.3.0** provides a comprehensive pipeline for evaluating 3D pavement scans (LAZ/LAS/CSV/TXT) by extracting ISO-standard descriptors across multiple profiles:
 
 1. **Preprocessing Pipeline**:
    - **Plane Removal:** Planar detrending or polynomial surface removal (enabled by default).

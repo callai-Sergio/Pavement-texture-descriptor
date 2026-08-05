@@ -11,7 +11,6 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from scipy import signal as sig
-import numba
 
 
 # ---------------------------------------------------------------------------
@@ -262,81 +261,24 @@ def calc_core_stats_1d(profile: np.ndarray) -> dict:
 
 # --- 3-D Areal statistics (ISO 25178) -------------------------------------
 
-@numba.njit(parallel=False)
-def _calc_sdr_numba(z: np.ndarray, dx: float, dy: float) -> float:
-    nr, nc = z.shape
-    if nr < 2 or nc < 2:
-        return 0.0
-    actual = 0.0
-    projected = 0.0
-    for i in range(nr - 1):
-        for j in range(nc - 1):
-            z00 = z[i, j]
-            z01 = z[i, j+1]
-            z10 = z[i+1, j]
-            if not np.isnan(z00) and not np.isnan(z01) and not np.isnan(z10):
-                dzdx = (z01 - z00) / dx
-                dzdy = (z10 - z00) / dy
-                actual += np.sqrt(1.0 + dzdx**2 + dzdy**2) * dx * dy
-                projected += dx * dy
-    if projected == 0.0:
-        return 0.0
-    return float((actual - projected) / projected * 100.0)
-
-
 def calc_sdr(z: np.ndarray, dx: float, dy: float) -> float:
     """Developed interfacial area ratio Sdr (ISO 25178).
 
     Measures % increase of actual surface area vs projected area.
     """
-    return _calc_sdr_numba(z, dx, dy)
-
-
-@numba.njit(parallel=False)
-def _calc_void_material_volume_numba(vals: np.ndarray, mr_pct: float, bins: int = 10000) -> Tuple[float, float]:
-    n = len(vals)
-    if n == 0:
-        return 0.0, 0.0
-    
-    vmin = np.nanmin(vals)
-    vmax = np.nanmax(vals)
-    if vmin == vmax or np.isnan(vmin):
-        return 0.0, 0.0
-        
-    hist = np.zeros(bins, dtype=np.int64)
-    valid_n = 0
-    for i in range(n):
-        v = vals[i]
-        if not np.isnan(v):
-            valid_n += 1
-            idx = int((v - vmin) / (vmax - vmin) * (bins - 1))
-            hist[idx] += 1
-            
-    if valid_n == 0:
-        return 0.0, 0.0
-        
-    target_count = int(mr_pct / 100.0 * valid_n)
-    target_count = min(target_count, valid_n - 1)
-    
-    cum_count = 0
-    cut_val = vmin
-    for i in range(bins - 1, -1, -1):
-        cum_count += hist[i]
-        if cum_count >= target_count:
-            cut_val = vmin + (i / (bins - 1)) * (vmax - vmin)
-            break
-            
-    above = 0.0
-    below = 0.0
-    for i in range(n):
-        v = vals[i]
-        if not np.isnan(v):
-            if v > cut_val:
-                above += (v - cut_val)
-            else:
-                below += (cut_val - v)
-                
-    return float(below / valid_n), float(above / valid_n)
+    # Partial derivatives via finite differences
+    dzdx = np.diff(z, axis=1) / dx
+    dzdy = np.diff(z, axis=0) / dy
+    # Trim to common shape
+    nr = min(dzdx.shape[0], dzdy.shape[0])
+    nc = min(dzdx.shape[1], dzdy.shape[1])
+    dzdx = dzdx[:nr, :nc]
+    dzdy = dzdy[:nr, :nc]
+    actual = np.nansum(np.sqrt(1 + dzdx ** 2 + dzdy ** 2)) * dx * dy
+    projected = nr * nc * dx * dy
+    if projected == 0:
+        return 0.0
+    return float((actual - projected) / projected * 100.0)
 
 
 def calc_void_material_volume(z: np.ndarray, mr_pct: float = 80.0) -> Tuple[float, float]:
@@ -345,8 +287,21 @@ def calc_void_material_volume(z: np.ndarray, mr_pct: float = 80.0) -> Tuple[floa
     Computed at the specified material-ratio cut-off (default 80 %).
     Units: volume per unit area.
     """
-    vals = z.ravel()
-    return _calc_void_material_volume_numba(vals, mr_pct)
+    vals = z[np.isfinite(z)]
+    if len(vals) == 0:
+        return 0.0, 0.0
+    sorted_z = np.sort(vals)[::-1]
+    n = len(sorted_z)
+    cut_idx = int(mr_pct / 100.0 * n)
+    cut_idx = min(cut_idx, n - 1)
+    z_cut = sorted_z[cut_idx]
+
+    # Above cut = material peaks; below cut = voids
+    above = vals[vals > z_cut] - z_cut
+    below = z_cut - vals[vals <= z_cut]
+    vm = float(np.sum(above) / n)   # material volume per unit area
+    vv = float(np.sum(below) / n)   # void volume per unit area
+    return vv, vm
 
 
 def calc_core_stats_3d(z: np.ndarray, dx: float = 1.0,
