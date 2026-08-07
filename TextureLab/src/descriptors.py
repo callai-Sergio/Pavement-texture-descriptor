@@ -495,7 +495,11 @@ def octave_band_rms(freqs: np.ndarray, psd: np.ndarray,
         if mask.any():
             rms = float(np.sqrt(np.sum(psd[mask]) * df))
             bands[f"{fc:.4f}"] = rms
-        fc *= ratio
+            
+        next_fc = fc * ratio
+        if next_fc <= fc:
+            break
+        fc = next_fc
     return bands
 
 

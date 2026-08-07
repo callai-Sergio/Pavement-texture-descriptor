@@ -1625,11 +1625,10 @@ def page_compare():
                         line=dict(color=color, dash="solid", width=3)
                     ))
                     
-                    y_type = "log" if log_y else None
                     fig.update_layout(
                         title=f"Prefix: {pfx}* (n={len(all_rms)})", template="plotly_dark", 
                         xaxis=dict(title="Wavelength λ (mm)", type="log", dtick=1),
-                        yaxis=dict(title="Mean Texture Level Spectrum L_TX (dB)" if smooth_psd else "Mean Power Spectral Density (dB)", type=y_type),
+                        yaxis=dict(title="Mean Texture Level Spectrum L_TX (dB)" if smooth_psd else "Mean Power Spectral Density (dB)"),
                         hovermode="x unified", height=400
                     )
                     st.plotly_chart(fig, use_container_width=True)
