@@ -1552,7 +1552,7 @@ def page_compare():
                     wls, rms_db, is_smooth = data
                     mode = 'lines+markers' if is_smooth else 'lines'
                     shape = 'spline' if is_smooth else 'linear'
-                    fig.add_trace(go.Scattergl(
+                    fig.add_trace(go.Scatter(
                         x=wls, y=rms_db, mode=mode, name=fn,
                         line=dict(color=styles[fn]["color"], dash=styles[fn]["dash"], shape=shape)
                     ))
@@ -1581,7 +1581,7 @@ def page_compare():
                     shape = 'spline' if is_smooth else 'linear'
                     
                     fig = go.Figure()
-                    fig.add_trace(go.Scattergl(
+                    fig.add_trace(go.Scatter(
                         x=wls, y=rms_db, mode=mode, name=fn,
                         line=dict(color=styles[fn]["color"], dash=styles[fn]["dash"], shape=shape)
                     ))
@@ -1622,7 +1622,7 @@ def page_compare():
                     shape = 'spline' if is_smooth else 'linear'
                     
                     fig = go.Figure()
-                    fig.add_trace(go.Scattergl(
+                    fig.add_trace(go.Scatter(
                         x=wls_common, y=mean_rms, mode=mode, name=f"{pfx}* (n={len(all_rms)})",
                         line=dict(color=color, dash="solid", shape=shape, width=3)
                     ))
