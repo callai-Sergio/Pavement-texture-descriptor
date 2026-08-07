@@ -50,7 +50,7 @@ from components.project_manager import export_project, load_project
 # ===================================================================
 # Constants
 # ===================================================================
-APP_VERSION = "2.3.0"
+APP_VERSION = "2.4.0"
 APP_AUTHOR = "Sergio Callai"
 APP_YEAR = "2025"
 
@@ -343,31 +343,18 @@ with st.sidebar:
 
     if st.session_state.get("processed", False):
         st.markdown("### 🧹 Data Management")
-        if st.button("💾 Save Project", use_container_width=True):
-            proj_bytes = export_project(dict(st.session_state))
-            import tkinter as tk
-            from tkinter import filedialog
-            
-            # Hide the main tkinter window
-            root = tk.Tk()
-            root.withdraw()
-            root.attributes('-topmost', True)
-            
-            save_path = filedialog.asksaveasfilename(
-                title="Save TextureLab Project",
-                defaultextension=".tlp",
-                filetypes=[("TextureLab Project", "*.tlp"), ("All files", "*.*")],
-                initialfile="texturelab_workspace.tlp"
+        if st.button("💾 Prepare Project for Download", use_container_width=True):
+            with st.spinner("Preparing workspace data for export..."):
+                st.session_state["project_export_bytes"] = export_project(dict(st.session_state))
+                
+        if "project_export_bytes" in st.session_state:
+            st.download_button(
+                label="📥 Download .tlp Project",
+                data=st.session_state["project_export_bytes"],
+                file_name="texturelab_workspace.tlp",
+                mime="application/octet-stream",
+                use_container_width=True
             )
-            root.destroy()
-            
-            if save_path:
-                try:
-                    with open(save_path, "wb") as f:
-                        f.write(proj_bytes)
-                    st.success(f"✅ Project saved successfully to:\n`{save_path}`")
-                except Exception as e:
-                    st.error(f"Error saving project: {e}")
         
         if st.button("🗑️ Clear all loaded data", use_container_width=True, type="secondary"):
             current_key = st.session_state.get("uploader_key", 0)
@@ -454,7 +441,7 @@ def render_settings_panel():
 
         st.markdown("### 🎨 Rendering")
         vert_exag = st.slider(
-            "Vertical exaggeration", 0.1, 3.0, 0.3, 0.1,
+            "Vertical exaggeration", 0.1, 5.0, 1.0, 0.1,
             key="s_vexag",
             help="Scale Z for visualization only. Lower = flatter (less spiky). Does NOT affect metrics.")
         robust_color = st.checkbox(
@@ -706,7 +693,7 @@ def render_summary():
                 dx_val = st.session_state.get("s_dx", 1.0)
                 dy_val = st.session_state.get("s_dy", 1.0)
                 _uz = st.session_state.get("s_uz", "units")
-                _ve = st.session_state.get("s_vexag", 0.3)
+                _ve = st.session_state.get("s_vexag", 1.0)
                 _rc = st.session_state.get("s_robcol", True)
                 view_mode = st.radio(
                     "Surface view", ["2D heatmap", "3D surface"],
@@ -747,7 +734,19 @@ def render_table(dx, dy, agg_mode, cfg):
     tbl = build_results_table(agg, areal, notes)
 
     st.markdown("### Full Parameter Table")
-    st.dataframe(tbl, use_container_width=True, height=min(600, 35 * 6 + 38))  # ~5 rows
+    
+    # 1D / 3D Display Filter
+    param_filter = st.radio("Display Parameters", ["All", "1D Parameters", "3D Parameters", "Custom"], horizontal=True, key="tbl_filter")
+    disp_tbl = tbl.copy()
+    if param_filter == "1D Parameters":
+        disp_tbl = disp_tbl[disp_tbl["Dim"] == "1D"]
+    elif param_filter == "3D Parameters":
+        disp_tbl = disp_tbl[disp_tbl["Dim"] != "1D"]
+    elif param_filter == "Custom":
+        sel_params = st.multiselect("Select parameters", disp_tbl["Parameter"].tolist(), default=disp_tbl["Parameter"].tolist())
+        disp_tbl = disp_tbl[disp_tbl["Parameter"].isin(sel_params)]
+        
+    st.dataframe(disp_tbl, use_container_width=True, height=min(600, 35 * len(disp_tbl) + 38))
 
     st.markdown("### Export")
     col_e1, col_e2, col_e3 = st.columns(3)
@@ -1385,33 +1384,61 @@ def page_compare():
 
     # Side-by-side key metrics
     st.markdown("### Key Metrics Comparison")
-    compare_params = st.multiselect(
-        "Parameters to compare",
-        ["MPD", "Ra", "Rq", "Rsk", "Rku", "Rt", "Rp", "Rv",
-         "Rk", "Rpk", "Rvk", "Sa", "Sq", "Sdr", "MeanSlope",
-         "PeakDensity", "g_factor", "FractalDim"],
-        default=["MPD", "Ra", "Rq", "Rsk", "Rk", "Sdr"],
-        key="compare_params")
-
-    if compare_params:
-        areal_list = [st.session_state["results_areal"].get(fn, {}) for fn in fnames]
-        batch_tbl = build_batch_table(
-            st.session_state["batch_agg"], fnames, compare_params, areal_results=areal_list)
-        st.dataframe(batch_tbl, use_container_width=True)
+    
+    export_figs = {} # Store figures for vector ZIP export
+    
+    areal_list = [st.session_state["results_areal"].get(fn, {}) for fn in fnames]
+    full_batch_tbl = build_batch_table(
+        st.session_state["batch_agg"], fnames, None, areal_results=areal_list)
         
-        # Batch Export
-        st.markdown("#### Export Batch Table")
-        col_be1, col_be2 = st.columns(2)
-        with col_be1:
-            st.download_button("⬇ Batch CSV", export_csv(batch_tbl), "batch_results.csv", "text/csv")
-        with col_be2:
-            st.download_button("⬇ Export Excel", export_excel(batch_tbl), "compare_results.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key="btn_xl_comp")
+    # 1D / 3D Display Filter for Batch
+    param_filter_batch = st.radio("Display Parameters (Batch)", ["All", "1D Parameters", "3D Parameters", "Custom"], horizontal=True, key="tbl_filter_batch")
+    
+    # We can use the PARAM_REGISTRY to figure out what is 1D vs 3D
+    from src.descriptors import PARAM_REGISTRY
+    all_params = [c for c in full_batch_tbl.columns if c != "File"]
+    disp_cols = ["File"]
+    compare_params = []
+    
+    if param_filter_batch == "All":
+        disp_cols += all_params
+        compare_params = ["MPD", "Ra", "Rq", "Rsk", "Rk", "Sdr"] # Default for charts
+    elif param_filter_batch == "Custom":
+        compare_params = st.multiselect(
+            "Parameters to compare",
+            all_params,
+            default=["MPD", "Ra", "Rq", "Rsk", "Rk", "Sdr"],
+            key="compare_params")
+        disp_cols += compare_params
+    else:
+        for p in all_params:
+            meta = PARAM_REGISTRY.get(p)
+            dim = meta.dim if meta else "1D"
+            if param_filter_batch == "1D Parameters" and dim == "1D":
+                disp_cols.append(p)
+                compare_params.append(p)
+            elif param_filter_batch == "3D Parameters" and dim != "1D":
+                disp_cols.append(p)
+                compare_params.append(p)
+                
+    disp_batch_tbl = full_batch_tbl[disp_cols]
+    st.dataframe(disp_batch_tbl, use_container_width=True)
+    
+    # Batch Export (Always exports ALL parameters)
+    st.markdown("#### Export Batch Table (Contains All Parameters)")
+    col_be1, col_be2 = st.columns(2)
+    with col_be1:
+        st.download_button("⬇ Batch CSV", export_csv(full_batch_tbl), "batch_results.csv", "text/csv")
+    with col_be2:
+        st.download_button("⬇ Export Excel", export_excel(full_batch_tbl), "compare_results.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key="btn_xl_comp")
 
-        # Bar chart comparison
+    # Bar chart comparison
+    if compare_params:
         color_map = {fn: styles[fn]["color"] for fn in fnames}
-        for param in compare_params:
-            vals = [st.session_state["aggregated"].get(fn, {}).get(param, 0)
-                    for fn in fnames]
+        # Limit to 6 charts max to avoid crowding
+        for param in compare_params[:6]:
+            if param not in full_batch_tbl.columns: continue
+            vals = full_batch_tbl[param].tolist()
             fig = px.bar(x=fnames, y=vals, title=f"{param} comparison",
                          template="plotly_dark",
                          color=fnames,
@@ -1419,6 +1446,9 @@ def page_compare():
                          labels={"x": "File", "y": param})
             fig.update_layout(showlegend=False)
             st.plotly_chart(fig, use_container_width=True)
+            export_figs[f"BarChart_{param}"] = fig
+        if len(compare_params) > 6:
+            st.info(f"Showing first 6 parameters as charts. Select 'Custom' to plot specific parameters.")
 
     st.markdown("---")
     
@@ -1450,8 +1480,24 @@ def page_compare():
                                  template="plotly_dark", size_max=15)
                 fig.update_traces(textposition='top center', marker=dict(size=12))
                 st.plotly_chart(fig, use_container_width=True)
+                export_figs["PCA_Comparison"] = fig
                 
                 st.caption(f"**Variance explained:** PC1: {pca_res['explained_variance_ratio'][0]:.1%} | PC2: {pca_res['explained_variance_ratio'][1]:.1%}")
+                
+                # PCA Exports
+                st.markdown("#### Export PCA Results")
+                col_pca1, col_pca2, col_pca3 = st.columns(3)
+                with col_pca1:
+                    st.download_button("⬇ PCA Data CSV", export_csv(df_pca), "pca_results.csv", "text/csv")
+                with col_pca2:
+                    st.download_button("⬇ PCA Data Excel", export_excel(df_pca), "pca_results.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                with col_pca3:
+                    try:
+                        img_bytes = fig.to_image(format="svg", engine="kaleido")
+                        st.download_button("⬇ PCA Figure (.svg)", img_bytes, "pca_plot.svg", "image/svg+xml")
+                    except Exception as e:
+                        st.warning(f"Figure export unavailable (requires kaleido): {e}")
+
             except Exception as e:
                 st.warning(f"Could not run PCA: {e}")
                 
@@ -1460,54 +1506,153 @@ def page_compare():
         st.markdown("Compares the wavelength distribution of the surfaces. Data is averaged over all extracted profiles per file.")
         
         dx = st.session_state.get("s_dx", 1.0)
-        smooth_psd = st.toggle("Smooth (1/3 Octave Bands)", value=True)
+        col1, col2 = st.columns(2)
+        with col1:
+            smooth_psd = st.toggle("Smooth (1/3 Octave Bands)", value=True)
+            log_y = st.toggle("Logarithmic Y-Axis (Note: dB is often negative and may not render on a log scale)", value=False)
+        with col2:
+            layout_mode_psd = st.radio("Layout Mode (PSD)", ["Combined (Single Chart)", "Separate Subplots", "Group by Prefix"], horizontal=True)
         
-        fig = go.Figure()
-        for fn in fnames:
+        prefix_len_psd = 7
+        if layout_mode_psd == "Group by Prefix":
+            prefix_len_psd = st.number_input("Number of characters to define group prefix (PSD)", min_value=1, max_value=50, value=7)
+            
+        def _get_psd_data(fn):
             profs = st.session_state["profiles"].get(fn, [])
-            if profs:
-                psds = []
-                freqs = None
-                for p in profs:
-                    f, psd = calc_psd_welch(p, dx)
-                    freqs = f
-                    psds.append(psd)
+            if not profs: return None
+            psds = []
+            freqs = None
+            for p in profs:
+                f, psd = calc_psd_welch(p, dx)
+                freqs = f
+                psds.append(psd)
+            if freqs is None or len(psds) == 0: return None
+            
+            mean_psd = np.mean(psds, axis=0)
+            if smooth_psd:
+                from src.descriptors import octave_band_rms
+                bands = octave_band_rms(freqs, mean_psd, n_octave=3)
+                if bands:
+                    wls = [1.0 / float(fc) for fc in bands.keys() if float(fc) > 0]
+                    rms_db = [20 * np.log10(v + 1e-15) for v in bands.values()]
+                    wls, rms_db = zip(*sorted(zip(wls, rms_db)))
+                    return wls, rms_db, True
+            else:
+                mask = freqs > 0
+                wls = 1.0 / freqs[mask]
+                rms_db = 10 * np.log10(mean_psd[mask] + 1e-15)
+                return wls, rms_db, False
+            return None
+
+        if layout_mode_psd == "Combined (Single Chart)":
+            fig = go.Figure()
+            for fn in fnames:
+                data = _get_psd_data(fn)
+                if data:
+                    wls, rms_db, is_smooth = data
+                    mode = 'lines+markers' if is_smooth else 'lines'
+                    shape = 'spline' if is_smooth else 'linear'
+                    fig.add_trace(go.Scattergl(
+                        x=wls, y=rms_db, mode=mode, name=fn,
+                        line=dict(color=styles[fn]["color"], dash=styles[fn]["dash"], shape=shape)
+                    ))
+                    
+            if len(fig.data) > 0:
+                h_mode = "x unified" if len(fnames) <= 5 else "closest"
+                y_type = "log" if log_y else None
+                fig.update_layout(
+                    template="plotly_dark",
+                    xaxis_title="Wavelength λ (mm)",
+                    yaxis_title="1/3 Octave Band RMS (dB re 1 mm)" if smooth_psd else "Power Spectral Density (dB re 1 mm³)",
+                    xaxis_type="log",
+                    yaxis_type=y_type,
+                    hovermode=h_mode
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.warning("No profile data available for PSD.")
                 
-                if freqs is not None and len(psds) > 0:
-                    mean_psd = np.mean(psds, axis=0)
+        elif layout_mode_psd == "Separate Subplots":
+            for fn in fnames:
+                data = _get_psd_data(fn)
+                if data:
+                    wls, rms_db, is_smooth = data
+                    mode = 'lines+markers' if is_smooth else 'lines'
+                    shape = 'spline' if is_smooth else 'linear'
                     
-                    if smooth_psd:
-                        from src.descriptors import octave_band_rms
-                        bands = octave_band_rms(freqs, mean_psd, n_octave=3)
-                        if bands:
-                            wls = [1.0 / float(fc) for fc in bands.keys() if float(fc) > 0]
-                            rms_db = [20 * np.log10(v + 1e-15) for v in bands.values()]
-                            wls, rms_db = zip(*sorted(zip(wls, rms_db)))
-                            fig.add_trace(go.Scatter(
-                                x=wls, y=rms_db, mode='lines+markers', name=fn,
-                                line=dict(color=styles[fn]["color"], dash=styles[fn]["dash"], shape='spline')
-                            ))
-                    else:
-                        mask = freqs > 0
-                        fig.add_trace(go.Scatter(
-                            x=1.0 / freqs[mask],
-                            y=10 * np.log10(mean_psd[mask] + 1e-15),
-                            mode='lines',
-                            name=fn,
-                            line=dict(color=styles[fn]["color"], dash=styles[fn]["dash"])
-                        ))
+                    fig = go.Figure()
+                    fig.add_trace(go.Scattergl(
+                        x=wls, y=rms_db, mode=mode, name=fn,
+                        line=dict(color=styles[fn]["color"], dash=styles[fn]["dash"], shape=shape)
+                    ))
                     
-        if len(fig.data) > 0:
-            fig.update_layout(
-                template="plotly_dark",
-                xaxis_title="Wavelength λ (mm)",
-                yaxis_title="1/3 Octave Band RMS (dB re 1 mm)" if smooth_psd else "Power Spectral Density (dB re 1 mm³)",
-                xaxis_type="log",
-                hovermode="x unified"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("No profile data available for PSD.")
+                    y_type = "log" if log_y else None
+                    fig.update_layout(
+                        title=fn, template="plotly_dark", 
+                        xaxis_title="Wavelength λ (mm)", xaxis_type="log",
+                        yaxis_title="1/3 Octave Band RMS (dB re 1 mm)" if smooth_psd else "Power Spectral Density (dB re 1 mm³)",
+                        yaxis_type=y_type, hovermode="x unified", height=400
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                    export_figs[f"PSD_Separate_{fn}"] = fig
+                    
+        elif layout_mode_psd == "Group by Prefix":
+            groups = {}
+            for fn in fnames:
+                pfx = fn[:prefix_len_psd]
+                if pfx not in groups:
+                    groups[pfx] = []
+                groups[pfx].append(fn)
+                
+            for idx, (pfx, fn_list) in enumerate(groups.items()):
+                all_rms = []
+                wls_common = None
+                is_smooth = False
+                for fn in fn_list:
+                    data = _get_psd_data(fn)
+                    if data:
+                        wls, rms_db, is_smooth = data
+                        wls_common = wls
+                        all_rms.append(rms_db)
+                        
+                if wls_common is not None and all_rms:
+                    mean_rms = np.mean(all_rms, axis=0)
+                    color = px.colors.qualitative.Plotly[idx % len(px.colors.qualitative.Plotly)]
+                    mode = 'lines+markers' if is_smooth else 'lines'
+                    shape = 'spline' if is_smooth else 'linear'
+                    
+                    fig = go.Figure()
+                    fig.add_trace(go.Scattergl(
+                        x=wls_common, y=mean_rms, mode=mode, name=f"{pfx}* (n={len(all_rms)})",
+                        line=dict(color=color, dash="solid", shape=shape, width=3)
+                    ))
+                    
+                    y_type = "log" if log_y else None
+                    fig.update_layout(
+                        title=f"Prefix: {pfx}* (n={len(all_rms)})", template="plotly_dark", 
+                        xaxis_title="Wavelength λ (mm)", xaxis_type="log",
+                        yaxis_title="Mean 1/3 Octave Band RMS (dB re 1 mm)" if smooth_psd else "Mean Power Spectral Density (dB re 1 mm³)",
+                        yaxis_type=y_type, hovermode="x unified", height=400
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                    export_figs[f"PSD_Group_{pfx}"] = fig
+                    
+        # PSD Data Export
+        st.markdown("#### Export PSD Data")
+        psd_export_data = []
+        for fn in fnames:
+            d = _get_psd_data(fn)
+            if d:
+                wls, rms, _ = d
+                for w, r in zip(wls, rms):
+                    psd_export_data.append({"File": fn, "Wavelength (mm)": w, "Amplitude (dB)": r})
+        if psd_export_data:
+            df_psd_ex = pd.DataFrame(psd_export_data)
+            col_psd1, col_psd2 = st.columns(2)
+            with col_psd1:
+                st.download_button("⬇ PSD Data CSV", export_csv(df_psd_ex), "psd_data.csv", "text/csv")
+            with col_psd2:
+                st.download_button("⬇ PSD Data Excel", export_excel(df_psd_ex), "psd_data.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
             
     with tab_abbott:
         st.markdown("### Abbott-Firestone Curve (Bearing Area)")
@@ -1525,7 +1670,7 @@ def page_compare():
             z_valid = z[np.isfinite(z)]
             if len(z_valid) == 0: return None
             z_sorted = np.sort(z_valid)[::-1]
-            step = max(1, len(z_sorted) // 1000)
+            step = max(1, len(z_sorted) // 250)
             z_sub = z_sorted[::step]
             mr = np.linspace(0, 100, len(z_sub))
             return mr, z_sub
@@ -1536,10 +1681,12 @@ def page_compare():
                 data = _get_abbott_data(fn)
                 if data:
                     mr, z_sub = data
-                    fig.add_trace(go.Scatter(x=mr, y=z_sub, mode='lines', name=fn, line=dict(color=styles[fn]["color"], dash=styles[fn]["dash"])))
+                    fig.add_trace(go.Scattergl(x=mr, y=z_sub, mode='lines', name=fn, line=dict(color=styles[fn]["color"], dash=styles[fn]["dash"])))
             if len(fig.data) > 0:
-                fig.update_layout(template="plotly_dark", xaxis_title="Material Ratio (%)", yaxis_title=f"Height ({st.session_state.get('s_uz', 'units')})", hovermode="x unified")
+                h_mode = "x unified" if len(fnames) <= 5 else "closest"
+                fig.update_layout(template="plotly_dark", xaxis_title="Material Ratio (%)", yaxis_title=f"Height (mm)", hovermode=h_mode)
                 st.plotly_chart(fig, use_container_width=True)
+                export_figs["Abbott_Combined"] = fig
             else:
                 st.warning("No surface data available.")
                 
@@ -1608,10 +1755,7 @@ def page_compare():
                     ))
 
                     # The actual curve
-                    fig.add_trace(go.Scatter(
-                        x=mr, y=z_sub, mode='lines', name=fn, 
-                        line=dict(color=styles[fn]["color"], dash=styles[fn]["dash"], width=2)
-                    ))
+                    fig.add_trace(go.Scattergl(x=mr, y=z_sub, mode='lines', name=fn, line=dict(color=styles[fn]["color"], dash=styles[fn]["dash"])))
                     
                     # Annotations
                     fig.add_annotation(x=0, y=z_top + rpk/2, text="Rpk", showarrow=False, xanchor="right", xshift=-5, font=dict(color="red"))
@@ -1620,11 +1764,12 @@ def page_compare():
                     fig.add_annotation(x=mr1, y=z_min, text="Mr1", showarrow=False, yanchor="top", yshift=-5, font=dict(color="green"))
                     fig.add_annotation(x=mr2, y=z_min, text="Mr2", showarrow=False, yanchor="top", yshift=-5, font=dict(color="green"))
                     
-                    fig.update_layout(title=fn, template="plotly_dark", xaxis_title="Material Ratio (%)", yaxis_title=f"Height ({st.session_state.get('s_uz', 'units')})", hovermode="x unified", height=500)
+                    fig.update_layout(title=fn, template="plotly_dark", xaxis_title="Material Ratio (%)", yaxis_title="Height (mm)", hovermode="x unified", height=500)
                     
                     col_p, col_t = st.columns([3, 1])
                     with col_p:
                         st.plotly_chart(fig, use_container_width=True)
+                        export_figs[f"Abbott_Separate_{fn}"] = fig
                     with col_t:
                         st.markdown("<br><br>", unsafe_allow_html=True)
                         st.markdown("**Parameters (Profile Avg):**")
@@ -1690,11 +1835,12 @@ def page_compare():
                             
                 if z_interp:
                     z_mean = np.mean(z_interp, axis=0)
+                    mr_mean = mr_std
                     color = px.colors.qualitative.Plotly[idx % len(px.colors.qualitative.Plotly)]
                     
                     fig = go.Figure()
-                    fig.add_trace(go.Scatter(x=mr_std, y=z_mean, mode='lines', name=f"{pfx}* (n={len(z_interp)})", line=dict(color=color, dash="solid")))
-                    fig.update_layout(title=f"Prefix: {pfx}* (n={len(z_interp)})", template="plotly_dark", xaxis_title="Material Ratio (%)", yaxis_title=f"Mean Height ({st.session_state.get('s_uz', 'units')})", hovermode="x unified", height=400)
+                    fig.add_trace(go.Scattergl(x=mr_std, y=z_mean, mode='lines', name=f"{pfx}* (n={len(z_interp)})", line=dict(color=color, dash="solid")))
+                    fig.update_layout(title=f"Prefix: {pfx}* (n={len(z_interp)})", template="plotly_dark", xaxis_title="Material Ratio (%)", yaxis_title="Mean Height (mm)", hovermode="x unified", height=400)
                     
                     col_p, col_t = st.columns([3, 1])
                     with col_p:
@@ -1786,7 +1932,7 @@ def page_compare():
                         
                         with cols[j]:
                             st.markdown(f"**{fn}**")
-                            _ve = st.session_state.get("s_vexag", 0.3)
+                            _ve = st.session_state.get("s_vexag", 1.0)
                             _rc = st.session_state.get("s_robcol", True)
                             _uz = st.session_state.get("s_uz", "units")
                             fig_3d = surface_3d(grid_obj[0].z, dx_val, dy_val, title="",

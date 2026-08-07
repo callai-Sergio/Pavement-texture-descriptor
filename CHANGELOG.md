@@ -1,5 +1,18 @@
 # TextureLab Changelog
 
+## [2.4.0] - 2026-08-07
+
+### Added
+- **Vectorized Figure Exports**: Added a ZIP export button to download all active plots (PCA, PSD, Abbott, 3D Surfaces) as high-quality `.svg` vector files using `kaleido`.
+- **Raw Data Exports**: Added CSV and Excel export buttons specifically for PSD curves and PCA coordinates.
+- **Two-Step Parameter Filtering**: Added a display filter ("1D Parameters", "3D Parameters", "All", "Custom") for both single file analysis and batch comparisons. The backend now calculates all parameters by default.
+- **Always Export All Data**: Batch CSV/Excel exports now always contain all computed parameters, bypassing UI display filters.
+
+### Changed
+- **Realistic 3D Surfaces**: The 3D Surface Gallery now enforces a realistic 1:1:1 scale (`aspectmode='data'`). The Z-axis is explicitly labeled with physical units (mm), and the default vertical exaggeration is set to 1.0 (true scale).
+- **Abbott Curve Enhancements**: Downsampled Abbott curve generation to 250 points to improve web browser rendering performance. Y-axis now explicitly states `Height (mm)`. Added visual grouping options (Combined, Separate, Group by Prefix).
+- **PSD Plot Enhancements**: X-axis explicitly labeled as `Wavelength λ (mm)`. Added a Linear/Logarithmic toggle for the Y-axis. Standardized titles and grouping layouts.
+
 ## [2.3.0] - 2026-08-05
 
 ### Changed

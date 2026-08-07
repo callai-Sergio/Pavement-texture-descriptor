@@ -25,7 +25,7 @@ class MainWindow(QMainWindow):
     """TextureLab Desktop main window."""
 
     APP_NAME = "TextureLab Desktop"
-    APP_VERSION = "2.3.0"
+    APP_VERSION = "2.4.0"
 
     def __init__(self):
         super().__init__()
@@ -312,7 +312,7 @@ class MainWindow(QMainWindow):
         QMessageBox.information(
             self, "About TextureLab Desktop",
             f"<h2>{self.APP_NAME}</h2>"
-            f"<p>Version 2.3.0</p>"
+            f"<p>Version 2.4.0</p>"
             "<p>Standalone pavement texture analysis application.</p>"
             "<p>© 2025 Sergio Callai<br>"
             "Licensed under CC BY-NC 4.0</p>"
