@@ -1470,7 +1470,7 @@ def page_compare():
         
         if pca_feats and len(pca_feats) >= 2 and len(fnames) >= 2:
             try:
-                pca_res = run_pca(batch_tbl, pca_feats, n_components=2)
+                pca_res = run_pca(batch_tbl_pca, pca_feats, n_components=2)
                 df_pca = pd.DataFrame(pca_res["scores"][:, :2], columns=["PC1", "PC2"])
                 df_pca["File"] = fnames
                 
@@ -1533,8 +1533,10 @@ def page_compare():
                 from src.descriptors import octave_band_rms
                 bands = octave_band_rms(freqs, mean_psd, n_octave=3)
                 if bands:
+                    z_unit = st.session_state.get("s_uz", "mm")
+                    offset = 60 if z_unit == "mm" else 0
                     wls = [1.0 / float(fc) for fc in bands.keys() if float(fc) > 0]
-                    rms_db = [20 * np.log10(v + 1e-15) for v in bands.values()]
+                    rms_db = [20 * np.log10(v + 1e-15) + offset for v in bands.values()]
                     wls, rms_db = zip(*sorted(zip(wls, rms_db)))
                     return wls, rms_db, True
             else:
@@ -1562,10 +1564,8 @@ def page_compare():
                 y_type = "log" if log_y else None
                 fig.update_layout(
                     template="plotly_dark",
-                    xaxis_title="Wavelength λ (mm)",
-                    yaxis_title="1/3 Octave Band RMS (dB re 1 mm)" if smooth_psd else "Power Spectral Density (dB re 1 mm³)",
-                    xaxis_type="log",
-                    yaxis_type=y_type,
+                    xaxis=dict(title="Wavelength λ (mm)", type="log", dtick=1),
+                    yaxis=dict(title="Texture Level Spectrum L_TX (dB)" if smooth_psd else "Power Spectral Density (dB)", type=y_type),
                     hovermode=h_mode
                 )
                 st.plotly_chart(fig, use_container_width=True)
@@ -1589,9 +1589,9 @@ def page_compare():
                     y_type = "log" if log_y else None
                     fig.update_layout(
                         title=fn, template="plotly_dark", 
-                        xaxis_title="Wavelength λ (mm)", xaxis_type="log",
-                        yaxis_title="1/3 Octave Band RMS (dB re 1 mm)" if smooth_psd else "Power Spectral Density (dB re 1 mm³)",
-                        yaxis_type=y_type, hovermode="x unified", height=400
+                        xaxis=dict(title="Wavelength λ (mm)", type="log", dtick=1),
+                        yaxis=dict(title="Texture Level Spectrum L_TX (dB)" if smooth_psd else "Power Spectral Density (dB)", type=y_type),
+                        hovermode="x unified", height=400
                     )
                     st.plotly_chart(fig, use_container_width=True)
                     export_figs[f"PSD_Separate_{fn}"] = fig
@@ -1630,9 +1630,9 @@ def page_compare():
                     y_type = "log" if log_y else None
                     fig.update_layout(
                         title=f"Prefix: {pfx}* (n={len(all_rms)})", template="plotly_dark", 
-                        xaxis_title="Wavelength λ (mm)", xaxis_type="log",
-                        yaxis_title="Mean 1/3 Octave Band RMS (dB re 1 mm)" if smooth_psd else "Mean Power Spectral Density (dB re 1 mm³)",
-                        yaxis_type=y_type, hovermode="x unified", height=400
+                        xaxis=dict(title="Wavelength λ (mm)", type="log", dtick=1),
+                        yaxis=dict(title="Mean Texture Level Spectrum L_TX (dB)" if smooth_psd else "Mean Power Spectral Density (dB)", type=y_type),
+                        hovermode="x unified", height=400
                     )
                     st.plotly_chart(fig, use_container_width=True)
                     export_figs[f"PSD_Group_{pfx}"] = fig

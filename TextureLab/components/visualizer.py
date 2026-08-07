@@ -123,12 +123,11 @@ def surface_3d(z: np.ndarray, dx: float, dy: float,
     else:
         cmin, cmax = 0, 1
 
-    # Vertical exaggeration for rendering only
-    z_render = z_ds * vert_exag
+    span_x = max(1e-6, x_coords[-1] - x_coords[0])
+    span_y = max(1e-6, y_coords[-1] - y_coords[0])
 
     fig = go.Figure(data=[go.Surface(
-        z=z_render, x=x_coords, y=y_coords,
-        surfacecolor=z_ds,           # colour from REAL z values
+        z=z_ds, x=x_coords, y=y_coords,
         colorscale="Viridis",
         cmin=cmin, cmax=cmax,
         colorbar=dict(title=f"Height ({units_z})", thickness=12, len=0.6),
@@ -145,7 +144,8 @@ def surface_3d(z: np.ndarray, dx: float, dy: float,
             yaxis_title="Y (mm)",
             zaxis_title=f"Height ({units_z})",
             camera=dict(eye=dict(x=1.5, y=1.5, z=0.8)),
-            aspectmode="data",
+            aspectmode="manual",
+            aspectratio=dict(x=1.0, y=span_y/span_x, z=vert_exag),
         ),
         margin=dict(l=10, r=10, t=40, b=10),
     )
