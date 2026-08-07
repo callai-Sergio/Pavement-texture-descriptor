@@ -1522,8 +1522,9 @@ def page_compare():
             if not profs: return None
             psds = []
             freqs = None
+            dx_val = st.session_state.get("s_dx", 1.0)
             for p in profs:
-                f, psd = calc_psd_welch(p, dx)
+                f, psd = calc_psd_welch(p, dx_val)
                 freqs = f
                 psds.append(psd)
             if freqs is None or len(psds) == 0: return None
