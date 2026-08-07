@@ -1947,12 +1947,24 @@ def page_compare():
 def page_help():
     st.markdown("## ❓ Help – TextureLab User Guide")
 
-    st.markdown("### Getting Started")
+    st.markdown("### 📘 Basic Operating Manual")
     st.markdown("""
-    1. **New Analysis**: Upload a single CSV or LAZ surface file → configure grid/pre-processing settings → click *Run Analysis*
-    2. **Open File**: Enter the full path to an existing file on your system
-    3. **Batch Analysis**: Upload multiple files simultaneously for comparison
-    4. **Compare Results**: After batch processing, compare key parameters side-by-side
+    **1. Starting an Analysis**
+    - **Data Import**: Click "Browse files" or drag-and-drop your `.csv`, `.las`, or `.laz` files.
+    - **Physical Grid Config**: Ensure the grid sizes ($dx$, $dy$) match your scanner (e.g. 1.0mm or 0.1mm) and select the right unit.
+    - **Pre-processing Options**: Choose how to filter the surface. Removing the macroscopic slope ("Plane removal") is critical.
+    - Click **"Run Analysis"** to process.
+
+    **2. Single File Review**
+    - View a 2D Heatmap or a realistic 3D Surface map.
+    - **Display Parameters**: Use the radio buttons (1D/3D) to filter the table. The backend always calculates all parameters.
+    - Export the single-file table to CSV, Excel, or JSON.
+
+    **3. Batch Comparison**
+    - **Key Metrics Comparison**: View a consolidated table of all files. The Batch CSV/Excel download buttons will *always* export every parameter.
+    - **Charts**: Easily compare PCA clusters, Power Spectral Density (PSD), and Abbott-Firestone curves. 
+    - **3D Surfaces Gallery**: Visually compare all surfaces in a true-scale 3D grid.
+    - **Vector Export (.zip)**: Click "Generate Vector Figures" at the bottom to download publication-ready `.svg` versions of all active plots.
     """)
 
     st.markdown("### Supported File Formats")
