@@ -1509,7 +1509,6 @@ def page_compare():
         col1, col2 = st.columns(2)
         with col1:
             smooth_psd = st.toggle("Smooth (1/3 Octave Bands)", value=True)
-            log_y = st.toggle("Logarithmic Y-Axis (Note: dB is often negative and may not render on a log scale)", value=False)
         with col2:
             layout_mode_psd = st.radio("Layout Mode (PSD)", ["Combined (Single Chart)", "Separate Subplots", "Group by Prefix"], horizontal=True)
         
@@ -1562,16 +1561,15 @@ def page_compare():
                     
             if len(fig.data) > 0:
                 h_mode = "x unified" if len(fnames) <= 5 else "closest"
-                y_type = "log" if log_y else None
                 fig.update_layout(
                     template="plotly_dark",
                     xaxis=dict(title="Wavelength λ (mm)", type="log", dtick=1),
-                    yaxis=dict(title="Texture Level Spectrum L_TX (dB)" if smooth_psd else "Power Spectral Density (dB)", type=y_type),
+                    yaxis=dict(title="Texture Level Spectrum L_TX (dB)" if smooth_psd else "Power Spectral Density (dB)"),
                     hovermode=h_mode
                 )
                 st.plotly_chart(fig, use_container_width=True)
             else:
-                st.warning("No profile data available for PSD.")
+                st.warning("No raw profile data found in memory. If you loaded an older project file, please re-run the Batch Analysis to view PSD curves.")
                 
         elif layout_mode_psd == "Separate Subplots":
             for fn in fnames:
@@ -1587,11 +1585,10 @@ def page_compare():
                         line=dict(color=styles[fn]["color"], dash=styles[fn]["dash"], shape=shape)
                     ))
                     
-                    y_type = "log" if log_y else None
                     fig.update_layout(
                         title=fn, template="plotly_dark", 
                         xaxis=dict(title="Wavelength λ (mm)", type="log", dtick=1),
-                        yaxis=dict(title="Texture Level Spectrum L_TX (dB)" if smooth_psd else "Power Spectral Density (dB)", type=y_type),
+                        yaxis=dict(title="Texture Level Spectrum L_TX (dB)" if smooth_psd else "Power Spectral Density (dB)"),
                         hovermode="x unified", height=400
                     )
                     st.plotly_chart(fig, use_container_width=True)
@@ -1689,7 +1686,7 @@ def page_compare():
                 st.plotly_chart(fig, use_container_width=True)
                 export_figs["Abbott_Combined"] = fig
             else:
-                st.warning("No surface data available.")
+                st.warning("No raw surface data found in memory. If you loaded an older project file, please re-run the Batch Analysis to view Abbott curves.")
                 
         elif layout_mode == "Separate Subplots":
             from src.descriptors import calc_rk_params

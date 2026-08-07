@@ -43,6 +43,10 @@ def export_project(session_state_dict: dict) -> bytes:
         "logs",
         "selected_params",
         "chart_styles",
+        "s_dx",
+        "s_dy",
+        "s_ux",
+        "s_uz",
     ]
     
     project_data = {k: session_state_dict.get(k) for k in keys_to_save if k in session_state_dict}
