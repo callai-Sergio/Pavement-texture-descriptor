@@ -24,7 +24,7 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("TextureLab Desktop")
     app.setOrganizationName("TextureLab")
-    app.setApplicationVersion("2.4.0")
+    app.setApplicationVersion("3.0.0")
 
     # Apply dark theme
     try:

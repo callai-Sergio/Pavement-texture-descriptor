@@ -2,9 +2,27 @@
 
 A project to evaluate and analyze pavement textures via the **TextureLab** Streamlit application.
 
+## 🆕 v3.0.0 — Headless batch pipeline (reference for reported values)
+
+`pipeline/texturelab_batch.py` computes the texture descriptors of 3dT LAZ scans in batch,
+without the interface, with a core checked against the standard texts:
+MPD/MSD/ETD (ISO 13473-1:2019), one-third-octave spectrum (ISO 13473-4:2024),
+areal parameters (ISO 25178-2/-3), Rk/Sk family (ISO 13565-2) and descriptive
+Hurst exponent / fractal dimension.
+
+```bash
+pip install -r pipeline/requirements.txt
+python pipeline/texturelab_batch.py --input /path/to/laz --output /path/to/results
+```
+
+- White paper: [Português](docs/WHITE_PAPER_PT.md) · [English](docs/WHITE_PAPER_EN.md)
+- Diagnostics and corrections: [docs/DIAGNOSTICO.md](docs/DIAGNOSTICO.md)
+
+> The Streamlit app below still uses the v2.4.0 calculations. Use the batch pipeline for reported values.
+
 ## 🔬 Features & Analysis Pipeline
 
-**TextureLab v2.4.0** provides a comprehensive pipeline for evaluating 3D pavement scans (LAZ/LAS/CSV/TXT) by extracting ISO-standard descriptors across multiple profiles:
+**TextureLab v3.0.0** provides a comprehensive pipeline for evaluating 3D pavement scans (LAZ/LAS/CSV/TXT) by extracting ISO-standard descriptors across multiple profiles:
 
 1. **Preprocessing Pipeline**:
    - **Plane Removal:** Planar detrending or polynomial surface removal (enabled by default).

@@ -1,5 +1,26 @@
 # TextureLab Changelog
 
+## [3.0.0] - 2026-10-05
+
+### Added
+- **Headless batch pipeline** (`pipeline/texturelab_batch.py`, `pipeline/requirements.txt`): single, standards-checked core for 3dT LAZ scans, parallel over files, no interface. Reference for reported values.
+  - Chain A per ISO 13473-1:2019: 0.5 mm strips and resampling, Annex E spikes, Table D.2 low-pass (designed at 2.40 mm, forward-backward), slope suppression per 100 mm segment, MSD/MPD, ETD = 1.1·MPD.
+  - Texture spectrum per ISO 13473-4:2024 method 1 (one-third-octave filters, re 1 µm, l ≥ 12·λmax, Annex F mirroring).
+  - Areal parameters per ISO 25178-2/-3 on SF, SL5 and provisional MICRO surfaces (Gaussian ISO 16610-61): heights, Sdq, Sdr, Sk family, volumes, Sal, Str.
+  - Rk/Sk family per ISO 13565-2 (least-squares line in the 40 % window, equal-area triangles).
+  - Hurst exponent and fractal dimension (descriptive), micro (0.05–0.5 mm) and macro (0.5–20 mm) fitted separately.
+- `docs/WHITE_PAPER_PT.md`, `docs/WHITE_PAPER_EN.md`, `docs/DIAGNOSTICO.md`.
+
+### Changed
+- About page: describes v3.0.0 and the pipeline; Acknowledgements section removed.
+- Version bumped to 3.0.0 (app, desktop, pyproject, exports).
+
+### Removed
+- Tracked `__pycache__`, `*.egg-info`, `pytest_out.txt`, `test_output.txt`, `scratch_test_tk.py`, the broken self-referencing submodule entry and `tests/test_llm_utils.py` (imported a removed package). Added `.gitignore`.
+
+### Known issues
+- The Streamlit app still uses the v2.4.0 calculations (see `docs/DIAGNOSTICO.md`), including `pickle` for `.tlp` projects.
+
 ## [2.4.0] - 2026-08-07
 
 ### Added

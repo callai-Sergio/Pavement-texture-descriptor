@@ -1,9 +1,0 @@
-Metadata-Version: 2.4
-Name: texturelab-engine
-Version: 2.1.0
-Summary: Core engine for pavement texture evaluation
-Author: TextureLab
-Requires-Dist: numpy
-Requires-Dist: pandas
-Requires-Dist: scipy
-Requires-Dist: scikit-learn

@@ -50,9 +50,9 @@ from components.project_manager import export_project, load_project
 # ===================================================================
 # Constants
 # ===================================================================
-APP_VERSION = "2.4.0"
+APP_VERSION = "3.0.0"
 APP_AUTHOR = "Sergio Callai"
-APP_YEAR = "2025"
+APP_YEAR = "2026"
 
 
 # ===================================================================
@@ -2070,9 +2070,24 @@ def page_about():
         ### Purpose
         TextureLab provides a unified environment for:
         - Ingesting 3D surface measurements from laser scanners and profilometers
-        - Computing standardised texture descriptors (ISO 13473, ISO 4287, ISO 25178, ISO 13565, ISO 10844)
+        - Computing standardised texture descriptors (ISO 13473-1/-4, ISO 25178-2/-3, ISO 13565-2)
         - Performing multivariate statistical analysis (PCA, clustering, regression)
         - Generating reproducible analysis reports
+
+        ### What's new in v{APP_VERSION}
+        - **Headless batch pipeline** (`pipeline/texturelab_batch.py`): standards-checked
+          core for 3dT LAZ scans, built to run on a server without the interface.
+          It is now the reference for reported values.
+        - **Chain A (MPD, MSD, ETD)** per ISO 13473-1:2019: 0.5 mm resampling,
+          Annex E spike removal, Table D.2 low-pass, slope suppression, ETD = 1.1·MPD.
+        - **Texture spectrum** per ISO 13473-4:2024 (one-third octaves, re 1 µm).
+        - **Areal parameters** per ISO 25178 (SF, SL5 and provisional MICRO surfaces)
+          and the Rk / Sk family per ISO 13565-2.
+        - **Hurst exponent and fractal dimension** (descriptive), micro and macro fitted separately.
+        - White paper and diagnostics in `docs/` (Portuguese and English).
+
+        > The calculations in this interface are still those of v2.4.0. Use the
+        > batch pipeline for reported values; see `docs/DIAGNOSTICO.md`.
 
         ### Technology
         Built with Python, Streamlit, NumPy, SciPy, Scikit-learn, and Plotly.
@@ -2094,14 +2109,6 @@ def page_about():
         | **Export Formats** | CSV, Excel, JSON |
         | **License** | CC BY-NC 4.0 |
         """)
-
-    st.markdown("---")
-    st.markdown("### Acknowledgements")
-    st.markdown("""
-    This tool builds on established standards and methods from the road surface
-    metrology community. Special thanks to the ISO TC 43/SC 1 and ISO TC 213
-    working groups for the foundational standards.
-    """)
 
 
 # ===================================================================

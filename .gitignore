@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# Saídas locais de teste e execução
+pytest_out.txt
+test_output.txt
+resultados/
+results/
+
+# Dados de medição (não versionar)
+*.laz
+*.las
+*.stl
+
+# Sistema
+.DS_Store
+Thumbs.db
