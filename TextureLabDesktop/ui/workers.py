@@ -138,3 +138,39 @@ class ProcessingWorker(QThread):
 
         except Exception as e:
             self.error.emit(f"{e}\n\n{traceback.format_exc()}")
+
+
+class PCAWorker(QThread):
+    finished = pyqtSignal(object)  # scores, loadings, explained, feat_names
+    error = pyqtSignal(str)
+
+    def __init__(self, df, num_cols, n_comp, parent=None):
+        super().__init__(parent)
+        self.df = df
+        self.num_cols = num_cols
+        self.n_comp = n_comp
+
+    def run(self):
+        try:
+            from engine.analytics import run_pca
+            res = run_pca(self.df, self.num_cols, self.n_comp)
+            self.finished.emit(res)
+        except Exception as e:
+            self.error.emit(str(e))
+
+
+class FeatureSelectionWorker(QThread):
+    finished = pyqtSignal(object)  # kept features list
+    error = pyqtSignal(str)
+
+    def __init__(self, df, parent=None):
+        super().__init__(parent)
+        self.df = df
+
+    def run(self):
+        try:
+            from engine.analytics import correlation_pruning
+            kept = correlation_pruning(self.df, threshold=0.95)
+            self.finished.emit(kept)
+        except Exception as e:
+            self.error.emit(str(e))

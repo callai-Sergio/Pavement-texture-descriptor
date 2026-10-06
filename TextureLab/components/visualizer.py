@@ -123,12 +123,11 @@ def surface_3d(z: np.ndarray, dx: float, dy: float,
     else:
         cmin, cmax = 0, 1
 
-    # Vertical exaggeration for rendering only
-    z_render = z_ds * vert_exag
+    span_x = max(1e-6, x_coords[-1] - x_coords[0])
+    span_y = max(1e-6, y_coords[-1] - y_coords[0])
 
     fig = go.Figure(data=[go.Surface(
-        z=z_render, x=x_coords, y=y_coords,
-        surfacecolor=z_ds,           # colour from REAL z values
+        z=z_ds, x=x_coords, y=y_coords,
         colorscale="Viridis",
         cmin=cmin, cmax=cmax,
         colorbar=dict(title=f"Height ({units_z})", thickness=12, len=0.6),
@@ -141,16 +140,12 @@ def surface_3d(z: np.ndarray, dx: float, dy: float,
         title=title, template="plotly_dark",
         width=750, height=550,
         scene=dict(
-            xaxis_title="X",
-            yaxis_title="Y",
-            zaxis_title=f"Height ({units_z}) ×{vert_exag}",
+            xaxis_title="X (mm)",
+            yaxis_title="Y (mm)",
+            zaxis_title=f"Height ({units_z})",
             camera=dict(eye=dict(x=1.5, y=1.5, z=0.8)),
             aspectmode="manual",
-            aspectratio=dict(
-                x=1.0,
-                y=ny_ds / nx_ds if nx_ds > 0 else 1.0,
-                z=0.25,
-            ),
+            aspectratio=dict(x=1.0, y=span_y/span_x, z=vert_exag),
         ),
         margin=dict(l=10, r=10, t=40, b=10),
     )
@@ -325,4 +320,70 @@ def feature_importance_plot(names: List[str],
     fig.update_layout(title="Feature importance", template="plotly_dark",
                       xaxis_title="Importance", yaxis_title="Feature",
                       height=max(400, len(names) * 25))
+    return fig
+
+
+def texture_spectrum_plot(spectrum_data: Dict[str, Dict[str, float]],
+                          title: str = "Texture Level Spectrum (mean by pavement type)") -> go.Figure:
+    """Plot Texture Level L_TX (dB re 1 µm) vs Wavelength λ (mm)."""
+    fig = go.Figure()
+
+    for p_type, bands in spectrum_data.items():
+        if not bands:
+            continue
+        sorted_bands = sorted(bands.items(), key=lambda x: float(x[0]))
+        freqs = np.array([float(k) for k, v in sorted_bands])
+        rms_vals = np.array([float(v) for k, v in sorted_bands])
+        
+        # Wavelength = 1 / frequency
+        # Filter valid frequencies
+        valid = freqs > 0
+        freqs = freqs[valid]
+        rms_vals = rms_vals[valid]
+        wavelengths = 1.0 / freqs
+
+        # L_TX = 20 * log10(RMS_um + 1e-12)
+        # Assuming RMS is in mm, multiply by 1000 to get um.
+        l_tx = 20.0 * np.log10(rms_vals * 1000.0 + 1e-12)
+
+        fig.add_trace(go.Scatter(
+            x=wavelengths, y=l_tx, mode="lines", name=p_type,
+            line=dict(width=2)
+        ))
+
+    # Add shaded backgrounds for domains
+    fig.add_vrect(
+        x0=0.001, x1=0.5,
+        fillcolor="LightBlue", opacity=0.1,
+        layer="below", line_width=0,
+    )
+    fig.add_vrect(
+        x0=0.5, x1=1000.0,
+        fillcolor="LightGreen", opacity=0.1,
+        layer="below", line_width=0,
+    )
+
+    # Dashed line at 0.5mm
+    fig.add_vline(x=0.5, line_dash="dash", line_color="indianred")
+
+    fig.add_annotation(x=np.log10(0.25), y=1.0, yref="paper",
+                       text="Microtexture Domain (λ < 0.5 mm)",
+                       showarrow=False, font=dict(size=10, color="gray"))
+    fig.add_annotation(x=np.log10(2.0), y=1.0, yref="paper",
+                       text="Macrotexture Domain (λ ≥ 0.5 mm)",
+                       showarrow=False, font=dict(size=10, color="gray"))
+
+    fig.update_layout(
+        title=title, template="plotly_dark",
+        xaxis_title="Wavelength λ (mm)",
+        yaxis_title="Texture Level L_TX (dB re 1 µm)",
+        xaxis_type="log", hovermode="x unified"
+    )
+
+    fig.update_xaxes(
+        tickvals=[0.1, 0.2, 0.5, 1, 2, 4, 10],
+        ticktext=["0.1", "0.2", "0.5", "1", "2", "4", "10"],
+        range=[np.log10(0.08), np.log10(10.0)]
+    )
+    
     return fig

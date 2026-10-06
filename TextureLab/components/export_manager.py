@@ -120,7 +120,7 @@ def export_json_report(aggregated: dict, areal: dict,
                        logs: list = None) -> str:
     """Full JSON report including settings for reproducibility."""
     report = {
-        "texturelab_version": "1.0.0",
+        "texturelab_version": "3.0.0",
         "metadata": metadata,
         "processing_settings": settings,
         "profile_results_aggregated": _sanitize(aggregated),

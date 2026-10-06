@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "texturelab-engine"
+version = "3.2.0"
+description = "Core engine for pavement texture evaluation"
+authors = [{name = "TextureLab"}]
+dependencies = [
+    "numpy",
+    "pandas",
+    "scipy",
+    "scikit-learn",
+    "numba>=0.58"
+]
+
+[tool.setuptools.packages.find]
+include = ["engine*"]
