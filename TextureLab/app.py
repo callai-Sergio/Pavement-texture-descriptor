@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import streamlit as st
 
 ROOT = Path(__file__).resolve().parent
@@ -116,7 +117,7 @@ def rk_table(df: pd.DataFrame, ch: str) -> pd.DataFrame:
 
 
 def rk_overlay(fig: go.Figure, mr: np.ndarray, h: np.ndarray, p, color: str, group: str,
-               labels: bool = True) -> None:
+               labels: bool = True, **pos) -> None:
     """Desenha sobre a curva de Abbott a reta equivalente e os pontos Smr1/Smr2 (só desenho:
     Sk, Smr1 e Smr2 vêm do resumo.json). O topo do núcleo é a altura da curva em Smr1."""
     sk, mr1, mr2 = (float(p.get(k, np.nan)) for k in ("Sk", "Smr1", "Smr2"))
@@ -125,7 +126,7 @@ def rk_overlay(fig: go.Figure, mr: np.ndarray, h: np.ndarray, p, color: str, gro
     z_top = float(np.interp(mr1, mr, h))
     z_bot = z_top - sk
     fig.add_scatter(x=[0, 100], y=[z_top, z_bot], mode="lines", line=dict(color=color, dash="dash", width=1),
-                    legendgroup=group, showlegend=False, hoverinfo="skip")
+                    legendgroup=group, showlegend=False, hoverinfo="skip", **pos)
     fig.add_scatter(x=[mr1, mr2], y=[z_top, z_bot], mode="markers+text" if labels else "markers",
                     legendgroup=group, showlegend=False,
                     marker=dict(color=color, size=9, symbol="diamond", line=dict(width=1, color="white")),
@@ -133,14 +134,49 @@ def rk_overlay(fig: go.Figure, mr: np.ndarray, h: np.ndarray, p, color: str, gro
                     textfont=dict(size=10, color=color),
                     hovertemplate=[f"{group}<br>Smr1 = {mr1:.1f} %<br>topo do núcleo = {z_top:.3f} mm<extra></extra>",
                                    f"{group}<br>Smr2 = {mr2:.1f} %<br>Sk = {sk:.3f} mm<br>inclinação = "
-                                   f"{-sk / 100:.4f} mm/%<extra></extra>"])
+                                   f"{-sk / 100:.4f} mm/%<extra></extra>"], **pos)
 
 
 def spectrum_axis(fig: go.Figure, lam) -> None:
     """Eixo λ em escala log, crescente (menores λ perto da origem), rótulos nas bandas nominais."""
     lam = sorted(set(float(x) for x in lam))
-    fig.update_xaxes(type="log", tickvals=lam, ticktext=[f"{x:g}" for x in lam],
-                     title="λ centro do terço de oitava [mm] (escala log)")
+    lo, hi = min(lam), max(lam)
+    decades = range(int(np.floor(np.log10(lo))), int(np.ceil(np.log10(hi))) + 1)
+    major = [m * 10.0 ** d for d in decades for m in (1, 2, 5) if lo * 0.95 <= m * 10.0 ** d <= hi * 1.05]
+    minor = [m * 10.0 ** d for d in decades for m in range(1, 10) if lo * 0.95 <= m * 10.0 ** d <= hi * 1.05]
+    fig.update_xaxes(type="log", tickvals=major, ticktext=[f"{x:g}" for x in major], showgrid=True,
+                     gridcolor="rgba(128,128,128,0.45)",
+                     minor=dict(tickvals=minor, showgrid=True, gridcolor="rgba(128,128,128,0.15)", ticks="outside"),
+                     range=[np.log10(lo) - 0.05, np.log10(hi) + 0.05],
+                     title="λ centro do terço de oitava [mm] — escala log (grade: 1–9 por década)")
+
+
+def abbott_grid(curves: list, ncols: int, yrange=None, height_row: int = 230, share_y: bool = True) -> go.Figure:
+    """Um gráfico pequeno por curva (mesmos eixos), com reta equivalente e Smr1/Smr2.
+    curves = [(titulo, mr, altura, params, cor)]."""
+    n = len(curves)
+    nrows = int(np.ceil(n / ncols))
+    fig = make_subplots(rows=nrows, cols=ncols, shared_xaxes=True, shared_yaxes=share_y,
+                        subplot_titles=[c[0] for c in curves], horizontal_spacing=0.03,
+                        vertical_spacing=min(0.08, 0.35 / max(1, nrows)))
+    for i, (title, mr, h, p, col) in enumerate(curves):
+        r, c = i // ncols + 1, i % ncols + 1
+        fig.add_scatter(x=mr, y=h, name=title, line=dict(color=col), showlegend=False, row=r, col=c)
+        if p is not None:
+            rk_overlay(fig, mr, h, p, col, title, labels=False, row=r, col=c)
+    fig.update_annotations(font_size=10)
+    if yrange is not None:
+        fig.update_yaxes(range=yrange)
+    fig.update_xaxes(range=[0, 100], dtick=20)
+    fig.update_layout(height=max(300, height_row * nrows + 60), margin=dict(t=40, l=40, r=10, b=40))
+    return fig
+
+
+def core_range(heights) -> list:
+    """Faixa do eixo de alturas cobrindo o núcleo (material ratio entre 1 % e 99 %)."""
+    lo, hi = float(np.min(heights)), float(np.max(heights))
+    pad = 0.05 * (hi - lo)
+    return [lo - pad, hi + pad]
 
 
 # ===================================================================
@@ -426,6 +462,16 @@ def view_file():
     with tabs[3]:
         chains = [c for c in AREAL_CHAINS if f"{c}_abbott_mr_pct" in v]
         if chains:
+            modo = st.radio("Exibição", ["Sobrepostas", "Lado a lado (uma por cadeia)"], horizontal=True,
+                            key="arq_abbott_mode")
+            if modo.startswith("Lado"):
+                curves = [(AREAL_CHAINS[ch], v[f"{ch}_abbott_mr_pct"], v[f"{ch}_abbott_altura_mm"],
+                           {k: r.get(f"{ch}_{k}", np.nan) for k in RK_KEYS}, COLORS[i % len(COLORS)])
+                          for i, ch in enumerate(chains)]
+                fga = abbott_grid(curves, ncols=len(curves), height_row=330, share_y=False)
+                fga.update_yaxes(title_text="altura [mm]", col=1)
+                fga.update_xaxes(title_text="Material ratio [%]")
+                st.plotly_chart(fga, key="abbott_grid")
             c1, c2 = st.columns(2)
             fa, fh = go.Figure(), go.Figure()
             for i, ch in enumerate(chains):
@@ -441,8 +487,11 @@ def view_file():
                              xaxis_title="Material ratio [%]", yaxis_title="altura [mm]", height=420)
             fh.update_layout(title="Distribuição de alturas (PDF)", xaxis_title="altura [mm]",
                              yaxis_title="densidade [1/mm]", height=420)
-            c1.plotly_chart(fa, key="abbott")
-            c2.plotly_chart(fh, key="hist")
+            if not modo.startswith("Lado"):
+                c1.plotly_chart(fa, key="abbott")
+                c2.plotly_chart(fh, key="hist")
+            else:
+                c1.plotly_chart(fh, key="hist")
             one = pd.DataFrame([r])
             rk = pd.concat({AREAL_CHAINS[ch]: rk_table(one, ch).iloc[0] for ch in chains}, axis=1)
             st.caption("Tracejado: reta equivalente da ISO 13565-2 (de 0 % a 100 %); losangos: Smr1 e Smr2. "
@@ -556,32 +605,44 @@ def view_compare():
                   key="cmp_abbott_chain")
     ab = all_abbott(proj, st.session_state["proj_token"], ch)
     if len(ab):
-        c1, c2 = st.columns(2)
-        show_rk = c1.checkbox("Mostrar reta equivalente e Smr1/Smr2 (ISO 13565-2)", value=True, key="cmp_rk")
-        zoom = c2.checkbox("Zoom no núcleo (eixo de alturas entre 1 % e 99 %)", value=True, key="cmp_zoom")
+        c0, c1, c2, c3 = st.columns([2, 2, 2, 1])
+        modo = c0.radio("Exibição", ["Sobrepostas", "Uma por gráfico"], horizontal=True, key="cmp_abbott_mode")
+        show_rk = c1.checkbox("Reta equivalente e Smr1/Smr2 (ISO 13565-2)", value=True, key="cmp_rk")
+        zoom = c2.checkbox("Zoom no núcleo (alturas entre 1 % e 99 %)", value=True, key="cmp_zoom")
+        ncols = c3.number_input("Colunas", 1, 8, 4, key="cmp_cols", disabled=modo == "Sobrepostas")
         a = ab.merge(sub[["arquivo", "_grupo"]], on="arquivo")
         g = a.groupby(["_grupo", "mr_pct"])["altura_mm"].mean().reset_index()
         tbl = rk_table(sub, ch)
         tbl.insert(0, "arquivo", sub["arquivo"])
         tbl.insert(0, gname, sub["_grupo"])
         gmean = tbl.drop(columns="arquivo").groupby(gname).mean()
-        fig = go.Figure()
-        for i, grp in enumerate(chosen):
-            d = g[g["_grupo"] == grp]
-            if d.empty:
-                continue
-            col = COLORS[i % len(COLORS)]
-            fig.add_scatter(x=d["mr_pct"], y=d["altura_mm"], name=grp, line=dict(color=col), legendgroup=grp)
-            if show_rk and grp in gmean.index:
-                rk_overlay(fig, d["mr_pct"].to_numpy(), d["altura_mm"].to_numpy(), gmean.loc[grp], col, grp,
-                           labels=False)
-        if zoom:
-            core = g[(g["mr_pct"] >= 1) & (g["mr_pct"] <= 99)]["altura_mm"]
-            pad = 0.05 * float(core.max() - core.min())
-            fig.update_yaxes(range=[float(core.min()) - pad, float(core.max()) + pad])
-        fig.update_layout(height=500, xaxis_title="Material ratio [%]", yaxis_title="altura [mm]",
-                          legend_title_text=gname)
-        st.plotly_chart(fig, key="cmp_abbott")
+        yr = core_range(g[(g["mr_pct"] >= 1) & (g["mr_pct"] <= 99)]["altura_mm"]) if zoom else None
+        if modo == "Sobrepostas":
+            fig = go.Figure()
+            for i, grp in enumerate(chosen):
+                d = g[g["_grupo"] == grp]
+                if d.empty:
+                    continue
+                col = COLORS[i % len(COLORS)]
+                fig.add_scatter(x=d["mr_pct"], y=d["altura_mm"], name=grp, line=dict(color=col), legendgroup=grp)
+                if show_rk and grp in gmean.index:
+                    rk_overlay(fig, d["mr_pct"].to_numpy(), d["altura_mm"].to_numpy(), gmean.loc[grp], col, grp,
+                               labels=False)
+            if yr:
+                fig.update_yaxes(range=yr)
+            fig.update_layout(height=500, xaxis_title="Material ratio [%]", yaxis_title="altura [mm]",
+                              legend_title_text=gname)
+            st.plotly_chart(fig, key="cmp_abbott")
+            st.caption("Clique em um item da legenda para esconder a curva; duplo clique para ver só ela.")
+        else:
+            curves = []
+            for i, grp in enumerate(chosen):
+                d = g[g["_grupo"] == grp]
+                if not d.empty:
+                    curves.append((grp, d["mr_pct"].to_numpy(), d["altura_mm"].to_numpy(),
+                                   gmean.loc[grp] if show_rk and grp in gmean.index else None,
+                                   COLORS[i % len(COLORS)]))
+            st.plotly_chart(abbott_grid(curves, int(ncols), yr), key="cmp_abbott_grid")
         st.caption("Curva = média das curvas do grupo; tracejado = reta equivalente; losangos = Smr1 e Smr2 "
                    "(passe o mouse para ver os valores). Smr1, Smr2 e Sk são médias do grupo, calculados por arquivo "
                    "no servidor. Inclinação da reta equivalente = −Sk/100 % [mm/%].")
