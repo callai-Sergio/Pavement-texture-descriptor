@@ -372,21 +372,28 @@ def _plane_removed(z: np.ndarray) -> np.ndarray:
     return z - (c[0] * xx + c[1] * yy + c[2])
 
 
-def _surface_fig(z: np.ndarray, step: float, max_pts: int, kind: str, title: str) -> go.Figure:
+def _surface_fig(z: np.ndarray, step: float, max_pts: int, kind: str, title: str, exag: float = 1.0) -> go.Figure:
+    """Mapa ou 3D da prévia. No 3D os eixos x, y e z ficam na mesma escala física, multiplicada
+    por 'exag' só no z (1 = escala real). Cores cortadas em P1–P99 para poucos vales profundos
+    não dominarem a escala (afeta só a cor, não a geometria)."""
     k = max(1, int(np.ceil(np.sqrt(z.size / max_pts))))
     zz = z[::k, ::k]
     x = np.arange(zz.shape[1]) * step * k
     y = np.arange(zz.shape[0]) * step * k
+    cmin, cmax = (float(v) for v in np.nanpercentile(zz, [1, 99]))
     if kind == "3D":
-        fig = go.Figure(go.Surface(z=zz, x=x, y=y, colorscale="Viridis", colorbar=dict(title="z [mm]")))
+        fig = go.Figure(go.Surface(z=zz, x=x, y=y, colorscale="Viridis", cmin=cmin, cmax=cmax,
+                                   colorbar=dict(title="z [mm]")))
         span = [x[-1], y[-1], max(1e-9, float(np.nanmax(zz) - np.nanmin(zz)))]
         r = max(span[:2])
         fig.update_layout(scene=dict(xaxis_title=t("ax_road"), yaxis_title=t("ax_width"), zaxis_title="z [mm]",
                                      aspectmode="manual",
-                                     aspectratio=dict(x=span[0] / r * 2, y=span[1] / r * 2, z=0.4)),
+                                     aspectratio=dict(x=span[0] / r * 2, y=span[1] / r * 2, z=span[2] / r * 2 * exag),
+                                     camera=dict(eye=dict(x=0.45, y=-1.45, z=0.75))),
                           height=600, margin=dict(l=0, r=0, t=30, b=0), title=title)
     else:
-        fig = go.Figure(go.Heatmap(z=zz, x=x, y=y, colorscale="Viridis", colorbar=dict(title="z [mm]")))
+        fig = go.Figure(go.Heatmap(z=zz, x=x, y=y, colorscale="Viridis", zmin=cmin, zmax=cmax,
+                                   colorbar=dict(title="z [mm]")))
         fig.update_layout(xaxis_title=t("ax_road"), yaxis_title=t("ax_width"), height=380,
                           margin=dict(l=0, r=0, t=30, b=0), title=title)
         fig.update_yaxes(scaleanchor="x")
@@ -413,13 +420,16 @@ def view_file():
     tabs = st.tabs([t(k) for k in ("tab_surface", "tab_profiles", "tab_spectrum", "tab_abbott", "tab_psd",
                                    "tab_segments", "tab_all_params")])
     with tabs[0]:
-        c = st.columns(4)
+        c = st.columns(5)
         src = c[0].radio(t("surface"), ["raw", "sl5"] if "SL5_previa" in v else ["raw"],
                          format_func=lambda x: t(f"surf_{x}"), key="surf_src")
         kind = c[1].radio(t("type"), ["map", "3d"], format_func=lambda x: t(f"kind_{x}"), key="surf_kind")
         max_pts = c[2].select_slider(t("points_plot"), [50_000, 150_000, 300_000, 600_000, 1_200_000],
                                      value=150_000, key="surf_pts")
-        detr = c[3].checkbox(t("remove_plane"), value=True, key="surf_detr")
+        exag = c[3].select_slider(t("vert_exag"), [1, 2, 3, 5, 10], value=2, format_func=lambda e: f"{e}×",
+                                  key="surf_exag", disabled=kind != "3d", help=t("vert_exag_help"))
+        detr = c[4].checkbox(t("remove_plane"), value=True, key="surf_detr", disabled=src == "sl5",
+                             help=t("remove_plane_help"))
         if src == "sl5":
             pstep = r.get("receita", {}).get("config", {}).get("preview_step", 8)
             z, step = v["SL5_previa"].astype(np.float32), float(r["dx_mm"]) * pstep
@@ -433,7 +443,8 @@ def view_file():
                 if detr:
                     z = _plane_removed(z)
         if z is not None:
-            st.plotly_chart(_surface_fig(z, step, max_pts, "3D" if kind == "3d" else "map", t(f"surf_{src}")),
+            title = t(f"surf_{src}") + (f" · {t('vert_exag')} {exag}×" if kind == "3d" else "")
+            st.plotly_chart(_surface_fig(z, step, max_pts, "3D" if kind == "3d" else "map", title, exag),
                             key="surf_fig")
             st.caption(t("preview_caption", step=step, k=int(round(step / r["dx_mm"]))))
     with tabs[1]:

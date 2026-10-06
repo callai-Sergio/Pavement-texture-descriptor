@@ -168,6 +168,16 @@ STRINGS: dict[str, dict[str, str]] = {
     "kind_3d": {"en": "3D", "de": "3D", "pt": "3D"},
     "points_plot": {"en": "Points in plot", "de": "Punkte im Diagramm", "pt": "Pontos no gráfico"},
     "remove_plane": {"en": "Remove plane (display)", "de": "Ebene entfernen (Anzeige)", "pt": "Remover plano (exibição)"},
+    "vert_exag": {"en": "Vertical exaggeration", "de": "Vertikale Überhöhung", "pt": "Exagero vertical"},
+    "vert_exag_help": {"en": "1× = true scale (x, y and z in the same units). Higher values only stretch the drawing; "
+                             "parameters are not affected.",
+                       "de": "1× = maßstabsgetreu (x, y und z in gleichen Einheiten). Höhere Werte strecken nur die "
+                             "Darstellung; die Parameter ändern sich nicht.",
+                       "pt": "1× = escala real (x, y e z na mesma unidade). Valores maiores só esticam o desenho; "
+                             "os parâmetros não mudam."},
+    "remove_plane_help": {"en": "Only for the raw preview (the SL5 surface is already filtered).",
+                          "de": "Nur für die Rohvorschau (die SL5-Oberfläche ist bereits gefiltert).",
+                          "pt": "Só para a prévia bruta (a superfície SL5 já é filtrada)."},
     "no_preview": {"en": "No preview.", "de": "Keine Vorschau.", "pt": "Sem prévia."},
     "preview_caption": {"en": "Preview with step {step:.3f} mm (every {k} points); parameters were computed on the full grid.",
                         "de": "Vorschau mit Schrittweite {step:.3f} mm (jeder {k}. Punkt); die Parameter wurden auf dem "
