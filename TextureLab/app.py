@@ -83,8 +83,11 @@ for _c in ("SF", "SL5", "MICRO"):
 
 DEFAULT_PARAMS = ["MPD", "ETD", "SF_Sq", "SL5_Sq", "SL5_Sdr_pct", "SL5_Ssk", "H_macro"]
 ID_COLS = ["arquivo", "trecho", "revestimento", "mp", "nr", "data"]
-GROUP_OPTIONS = {"file": ["arquivo"], "section": ["trecho"], "surface": ["revestimento"],
-                 "mp": ["mp"], "section_mp": ["trecho", "mp"]}
+# "section_surface" (trecho + revestimento) identifica cada pavimento: agrupa os 5 MPs da mesma superfície.
+# Trecho sozinho mistura revestimentos (A1, B244); revestimento sozinho junta trechos (SMA11, ISO).
+GROUP_OPTIONS = {"file": ["arquivo"], "section_surface": ["trecho", "revestimento"], "section": ["trecho"],
+                 "surface": ["revestimento"], "mp": ["mp"], "section_mp": ["trecho", "mp"]}
+GROUPINGS = [g for g in GROUP_OPTIONS if g != "file"]   # agrupamentos com mais de um arquivo por grupo
 AREAL_CHAINS = ["SF", "SL5", "MICRO"]
 
 
@@ -349,13 +352,15 @@ def view_summary():
                  **{p: st.column_config.NumberColumn(label(p), format="%.4g") for p in cols}})
 
     st.markdown(f"### {t('mean_by_group')}")
-    gcode = st.selectbox(t("group_by"), list(GROUP_OPTIONS)[1:], format_func=grp_label, index=3, key="sum_gby")
+    gcode = st.selectbox(t("group_by"), GROUPINGS, format_func=grp_label, index=0, key="sum_gby")
     gname = grp_label(gcode)
     gcols = GROUP_OPTIONS[gcode]
     if cols:
         agg = ok.groupby(gcols)[cols].agg(["mean", "std", "count"])
         agg.columns = [f"{p} ({t('agg_' + s)})" for p, s in agg.columns]
-        st.dataframe(agg.reset_index(), hide_index=True, column_config=id_col_config())
+        st.dataframe(agg.reset_index().style.format(precision=4, na_rep="–"), hide_index=True,
+                     column_config=id_col_config())
+        st.caption(t("std_caption"))
 
     c1, c2 = st.columns(2)
     c1.download_button(t("dl_full_csv"), ok.to_csv(index=False).encode("utf-8"),
@@ -585,7 +590,7 @@ def view_compare():
     gcols = GROUP_OPTIONS[gcode]
     keys = group_key(ok, gcols)
     groups = sorted(keys.unique())
-    chosen = c[1].multiselect(t("groups"), groups, default=groups[:12], key=f"cmp_groups_{gcode}")
+    chosen = c[1].multiselect(t("groups"), groups, default=groups[:20], key=f"cmp_groups_{gcode}")
     if not chosen:
         st.info(t("pick_group"))
         return
@@ -700,7 +705,7 @@ def view_stats():
                             default=[p for p in ["MPD", "SF_Sq", "SL5_Sq", "SL5_Ssk", "SL5_Sku", "SL5_Sdr_pct",
                                                  "SL5_Sal", "MICRO_Sq", "H_macro"] if p in params_all],
                             format_func=label, key="st_params")
-    gcode = st.selectbox(t("color_by"), list(GROUP_OPTIONS)[1:], format_func=grp_label, index=0, key="st_color")
+    gcode = st.selectbox(t("color_by"), GROUPINGS, format_func=grp_label, index=0, key="st_color")
     gname = grp_label(gcode)
     color = group_key(ok, GROUP_OPTIONS[gcode])
     if len(params) < 2:
