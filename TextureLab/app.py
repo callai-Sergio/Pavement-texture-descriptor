@@ -636,11 +636,13 @@ def view_file():
                 for col, name in (("rms_via_um", t("w_dir_road")), ("rms_transversal_um", t("w_dir_cross")),
                                   ("rms_diagonal_um", t("w_dir_diag"))):
                     f2.add_scatter(x=w2["lambda_centro_mm"], y=w2[col], mode="lines+markers", name=name)
-                f2.add_bar(x=w2["lambda_centro_mm"], y=w2["anisotropia"], name=t("w_anis"), opacity=0.3,
-                           secondary_y=True)
+                f2.add_scatter(x=w2["lambda_centro_mm"], y=w2["anisotropia"], name=t("w_anis"), mode="lines+markers",
+                               line=dict(color="black", dash="dot"), marker=dict(symbol="square", size=8),
+                               secondary_y=True)
                 wavelet_axis(f2, w2["lambda_centro_mm"])
                 f2.update_yaxes(title_text=t("ax_rms_um"), type="log", secondary_y=False)
-                f2.update_yaxes(title_text=t("w_anis"), range=[-1, 1], secondary_y=True, showgrid=False)
+                f2.update_yaxes(title_text=t("w_anis"), range=[-1, 1], dtick=0.5, zeroline=True, secondary_y=True,
+                                showgrid=False)
                 f2.update_layout(title=t("w_2d_title"), height=420, legend=dict(orientation="h", y=-0.25))
                 c2.plotly_chart(f2, key="w_2d")
             st.caption(t("w_caption"))
