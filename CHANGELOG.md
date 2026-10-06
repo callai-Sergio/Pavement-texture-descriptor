@@ -6,6 +6,15 @@
 - **g-factor (shape factor)** per DIN ISO 10844:2024-11, clause 5.3.2 and Annex B: per 100 mm MPD segment (ISO 13473-1 processing without low-pass, zero mean), `g_pct` per segment in `cadeiaA_segmentos.csv`, `g_factor_media`/`g_factor_desvio`/`g_factor_n_segmentos` per file; example segment in `visualizacao.npz`. Unit tests with known answers.
 - Viewer: "DIN ISO 10844" parameter group (g-factor + skewness), g-factor histogram and an Annex B Figure B.3-style plot in the Segments tab, g-factor in the metric cards and default comparisons.
 
+- **Wavelet texture analysis** (descriptive, Daubechies db4): profile octave spectrum (`ondaletas_perfil.csv`, micro/macro shares) and 2D directional energies and anisotropy on SL5 (`ondaletas_2d.csv`). Pipeline dependency: PyWavelets.
+- White paper PDFs in `docs/pdf/` and the generator `tools/md2pdf.py` (Markdown + KaTeX → headless Chrome).
+
+### Fixed
+- `.tlproj` name for output folders with a dot (`Resultados_v3.2` was packed as `Resultados_v3.tlproj`, overwriting it).
+
+### Changed
+- Version 3.2.0 in pyproject, pipeline, viewer and desktop wrapper.
+
 ### Removed
 - ETD (it is only 1.1·MPD) from the pipeline output, configuration and viewer.
 

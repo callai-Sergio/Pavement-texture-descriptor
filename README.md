@@ -2,10 +2,11 @@
 
 A project to evaluate and analyze pavement textures via the **TextureLab** Streamlit application.
 
-## 🆕 v3.1.0 — Compute once on the server, view on the PC
+## 🆕 v3.2.0 — Compute once on the server, view on the PC
 
 There is now **one** calculation core, `pipeline/texturelab_batch.py` (v3.0.0 standards-checked
-core + memory optimizations + Hurst). It runs in batch on the server and writes a **project**
+core + memory optimizations + Hurst; v3.2.0 adds the g-factor per DIN ISO 10844:2024-11 Annex B
+and descriptive wavelet texture analysis, and drops ETD). It runs in batch on the server and writes a **project**
 (results folder or `.tlproj` zip: JSON/CSV/NPZ, no pickle). The Streamlit app `TextureLab/app.py`
 is a **viewer**: it opens the project and only renders tables, profiles, spectra, Abbott curves,
 PSD/Hurst, 3D surfaces, comparisons and PCA. Nothing is recalculated in the app.
@@ -18,12 +19,14 @@ pipeline/servidor.sh status
 # PC: own venv + viewer
 python -m venv .venv && .venv\Scripts\activate
 pip install -r TextureLab/requirements-viewer.txt
-streamlit run TextureLab/app.py        # then open Resultados_v3.tlproj or the folder
+streamlit run TextureLab/app.py        # then open Resultados_v3.2.tlproj or the folder
 ```
 
 - Batch usage, shared-server memory lock and options: [pipeline/README.md](pipeline/README.md)
 - Project format and recipe (code version + config + LAZ id): [docs/FORMATO_PROJETO.md](docs/FORMATO_PROJETO.md)
-- White paper: [Português](docs/WHITE_PAPER_PT.md) · [English](docs/WHITE_PAPER_EN.md)
+- White paper: [Português](docs/WHITE_PAPER_PT.md) · [English](docs/WHITE_PAPER_EN.md) ·
+  PDF: [PT](docs/pdf/TextureLab_White_Paper_PT.pdf) · [EN](docs/pdf/TextureLab_White_Paper_EN.pdf)
+  (regenerate with `python tools/md2pdf.py`)
 - Diagnostics and corrections: [docs/DIAGNOSTICO.md](docs/DIAGNOSTICO.md)
 
 > The previous app, which computed with the v2.4.0 calculations (see the diagnostics), is kept as

@@ -42,7 +42,7 @@ O `.tlproj` só contém esses arquivos. Outras pastas de análise que estiverem 
 Cada `resumo.json` guarda a `receita`:
 
 ```json
-{"versao_nucleo": "3.1.0", "config": {...}, "laz": {"nome": "...", "tamanho_bytes": 164163335,
+{"versao_nucleo": "3.2.0", "config": {...}, "laz": {"nome": "...", "tamanho_bytes": 164163335,
  "sha256_pontas": "..."}, "hash": "1a2b3c4d5e6f7a8b"}
 ```
 
