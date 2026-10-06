@@ -58,6 +58,7 @@ st.markdown("""
 # Parâmetros e rótulos
 # ===================================================================
 UNITS = {
+    "W_rms_micro_um": "µm", "W_rms_macro_um": "µm",
     "MPD": "mm", "MPD_desvio": "mm", "g_factor_media": "%", "g_factor_desvio": "%",
     "perfil_Rq_media": "mm", "perfil_Rk_media": "mm", "perfil_Rpk_media": "mm", "perfil_Rvk_media": "mm",
     "perfil_Rmr1_media": "%", "perfil_Rmr2_media": "%",
@@ -74,6 +75,8 @@ PARAM_GROUPS = {
     "iso10844": ["g_factor_media", "g_factor_desvio", "perfil_Rsk_media"],
     "profile": ["perfil_Rq_media", "perfil_Rsk_media", "perfil_Rku_media", "perfil_Rk_media",
                             "perfil_Rpk_media", "perfil_Rvk_media", "perfil_Rmr1_media", "perfil_Rmr2_media"],
+    "wavelets": ["W_rms_micro_um", "W_rms_macro_um", "W_fracao_micro", "W2_anisotropia_micro",
+                 "W2_anisotropia_macro"],
     "hurst": ["H_macro", "D_superficie_macro", "H_macro_R2",
                                      "H_micro", "D_superficie_micro", "H_micro_R2"],
 }
@@ -249,6 +252,23 @@ def all_spectra(_proj: Project, token: int) -> pd.DataFrame:
         t = _proj.table(arq, "espectro_terco_oitava.csv")
         if t is not None and len(t):
             parts.append(t.assign(arquivo=arq))
+    return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
+
+
+def wavelet_axis(fig: go.Figure, lam) -> None:
+    """Eixo λ (centro de cada oitava de ondaleta) em escala log, crescente."""
+    lam = sorted(set(float(x) for x in lam))
+    fig.update_xaxes(type="log", tickvals=lam, ticktext=[f"{x:.3g}" for x in lam], title=t("ax_lambda_octave"))
+
+
+@st.cache_data(show_spinner=False, max_entries=8)
+def all_tables(_proj: Project, token: int, filename: str) -> pd.DataFrame:
+    """Uma tabela CSV (ex.: ondaletas_perfil.csv) de todos os arquivos, em formato longo."""
+    parts = []
+    for arq in _proj.index["arquivo"]:
+        tb = _proj.table(arq, filename)
+        if tb is not None and len(tb):
+            parts.append(tb.assign(arquivo=arq))
     return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
 
 
@@ -441,7 +461,7 @@ def view_file():
         st.info(t("no_view_data"))
 
     tabs = st.tabs([t(k) for k in ("tab_surface", "tab_profiles", "tab_spectrum", "tab_abbott", "tab_psd",
-                                   "tab_segments", "tab_all_params")])
+                                   "tab_segments", "tab_wavelets", "tab_all_params")])
     with tabs[0]:
         c = st.columns(5)
         src = c[0].radio(t("surface"), ["raw", "sl5"] if "SL5_previa" in v else ["raw"],
@@ -600,6 +620,34 @@ def view_file():
                 st.caption(t("g_caption"))
             st.dataframe(seg, hide_index=True)
     with tabs[6]:
+        wp, w2 = proj.table(arq, "ondaletas_perfil.csv"), proj.table(arq, "ondaletas_2d.csv")
+        if wp is None or not len(wp):
+            st.info(t("no_wavelets"))
+        else:
+            c1, c2 = st.columns(2)
+            fw = go.Figure(go.Scatter(x=wp["lambda_centro_mm"], y=wp["L_w_dB_media"], mode="lines+markers",
+                                      error_y=dict(array=wp["L_w_dB_desvio"], visible=True), name=t("mean_sd")))
+            wavelet_axis(fw, wp["lambda_centro_mm"])
+            fw.add_vline(x=0.5, line=dict(dash="dot", color="gray"), annotation_text="micro | macro")
+            fw.update_layout(title=t("w_profile_title"), yaxis_title=t("ax_w_level"), height=420)
+            c1.plotly_chart(fw, key="w_prof")
+            if w2 is not None and len(w2):
+                f2 = make_subplots(specs=[[{"secondary_y": True}]])
+                for col, name in (("rms_via_um", t("w_dir_road")), ("rms_transversal_um", t("w_dir_cross")),
+                                  ("rms_diagonal_um", t("w_dir_diag"))):
+                    f2.add_scatter(x=w2["lambda_centro_mm"], y=w2[col], mode="lines+markers", name=name)
+                f2.add_bar(x=w2["lambda_centro_mm"], y=w2["anisotropia"], name=t("w_anis"), opacity=0.3,
+                           secondary_y=True)
+                wavelet_axis(f2, w2["lambda_centro_mm"])
+                f2.update_yaxes(title_text=t("ax_rms_um"), type="log", secondary_y=False)
+                f2.update_yaxes(title_text=t("w_anis"), range=[-1, 1], secondary_y=True, showgrid=False)
+                f2.update_layout(title=t("w_2d_title"), height=420, legend=dict(orientation="h", y=-0.25))
+                c2.plotly_chart(f2, key="w_2d")
+            st.caption(t("w_caption"))
+            st.dataframe(wp, hide_index=True)
+            if w2 is not None and len(w2):
+                st.dataframe(w2, hide_index=True)
+    with tabs[7]:
         flat = {k: v_ for k, v_ in r.items() if not isinstance(v_, (dict, list))}
         st.dataframe(pd.DataFrame({t("param"): list(flat), t("value"): [str(x) for x in flat.values()]}),
                      hide_index=True, height=600)
@@ -723,6 +771,48 @@ def view_compare():
                            file_name=f"{proj.name}_abbott_{ch}.csv", mime="text/csv", key="dl_abbott")
     else:
         st.info(t("no_abbott_project"))
+
+    st.markdown(f"### {t('w_section')}")
+    compare_wavelets(sub, chosen, gname)
+
+
+def compare_wavelets(sub: pd.DataFrame, chosen: list, gname: str) -> None:
+    """Espectro de ondaletas do perfil e anisotropia 2D por grupo (média das energias dos arquivos)."""
+    wp = all_tables(proj, st.session_state["proj_token"], "ondaletas_perfil.csv")
+    if not len(wp):
+        st.info(t("no_wavelets"))
+        return
+    s = wp.merge(sub[["arquivo", "_grupo"]], on="arquivo")
+    s["var"] = (s["rms_um"] * 1e-3) ** 2
+    g = s.groupby(["_grupo", "lambda_centro_mm"])["var"].mean().reset_index()
+    g["L_w_dB"] = 10 * np.log10(g["var"] / 1e-6)
+    c1, c2 = st.columns(2)
+    fig = px.line(g, x="lambda_centro_mm", y="L_w_dB", color="_grupo", markers=True,
+                  category_orders={"_grupo": chosen}, color_discrete_sequence=COLORS,
+                  labels={"lambda_centro_mm": "λ [mm]", "L_w_dB": t("ax_w_level"), "_grupo": gname})
+    wavelet_axis(fig, g["lambda_centro_mm"])
+    fig.update_layout(height=450, title=t("w_profile_title"))
+    c1.plotly_chart(fig, key="cmp_w_prof")
+    w2 = all_tables(proj, st.session_state["proj_token"], "ondaletas_2d.csv")
+    if len(w2):
+        s2 = w2.merge(sub[["arquivo", "_grupo"]], on="arquivo")
+        s2["ev"], s2["et"] = s2["rms_via_um"] ** 2, s2["rms_transversal_um"] ** 2
+        g2 = s2.groupby(["_grupo", "lambda_centro_mm"])[["ev", "et"]].mean().reset_index()
+        g2["anis"] = (g2["ev"] - g2["et"]) / (g2["ev"] + g2["et"])
+        fig2 = px.line(g2, x="lambda_centro_mm", y="anis", color="_grupo", markers=True,
+                       category_orders={"_grupo": chosen}, color_discrete_sequence=COLORS,
+                       labels={"lambda_centro_mm": "λ [mm]", "anis": t("w_anis"), "_grupo": gname})
+        wavelet_axis(fig2, g2["lambda_centro_mm"])
+        fig2.add_hline(y=0, line=dict(color="gray", dash="dot"))
+        fig2.update_yaxes(range=[-1, 1])
+        fig2.update_layout(height=450, title=t("w_2d_anis_title"))
+        c2.plotly_chart(fig2, key="cmp_w_2d")
+    wide = s.pivot_table(index=["_grupo", "arquivo"], columns="lambda_centro_mm", values="L_w_dB_media")
+    wide.columns = [f"{c:.3g} mm" for c in sorted(wide.columns)]
+    st.caption(t("w_caption"))
+    with st.expander(t("all_samples", n=len(wide)), expanded=False):
+        st.dataframe(wide.round(2).reset_index().rename(columns={"_grupo": gname}), hide_index=True,
+                     column_config=id_col_config())
 
 
 # ===================================================================

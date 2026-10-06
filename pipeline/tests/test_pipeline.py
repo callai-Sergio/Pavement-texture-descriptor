@@ -70,8 +70,9 @@ def test_results_and_viewer_data(project):
     assert 0 < r["g_factor_media"] < 100 and r["g_factor_n_segmentos"] == r["A_n_segmentos_validos"]
     assert r["A_n_segmentos_validos"] > 0
     assert "H_macro" in r and "SL5_Sq" in r and "MICRO_Sq" in r
+    assert 0 <= r["W_fracao_micro"] <= 1 and -1 <= r["W2_anisotropia_macro"] <= 1
     for name in ("cadeiaA_segmentos.csv", "espectro_terco_oitava.csv", "psd_media.csv", "previa.npz",
-                 "visualizacao.npz"):
+                 "visualizacao.npz", "ondaletas_perfil.csv", "ondaletas_2d.csv"):
         assert (od / name).exists(), name
     with np.load(od / "visualizacao.npz", allow_pickle=False) as v:
         assert int(v["versao_formato"]) == tb.FORMAT_VERSION
@@ -179,3 +180,31 @@ def test_real_file_matches_reference(tmp_path):
     for k, v in ref.items():
         if isinstance(v, float) and not k.endswith("_s") and k != "pico_memoria_processo_gb":
             assert r[k] == pytest.approx(v, rel=1e-9, abs=1e-12), k
+
+
+def test_wavelet_profile_band_and_energy():
+    """Senoide de λ = 1 mm cai na oitava [0,704; 1,408] mm (dx = 0,011 mm); a energia somada nas
+    oitavas recupera a variância do perfil."""
+    pytest.importorskip("pywt")
+    dx, n = 0.011, 23000
+    x = np.arange(n) * dx
+    Z = np.tile(0.2 * np.sin(2 * np.pi * x / 1.0), (60, 1)).astype(np.float32)
+    out, b = tb.chain_wavelet_profile(Z, dx, tb.load_config(None))
+    top = b.loc[b["fracao_energia"].idxmax()]
+    assert top["lambda_min_mm"] <= 1.0 <= top["lambda_max_mm"] and top["fracao_energia"] > 0.8
+    var = (b["rms_um"] ** 2).sum() * 1e-6
+    assert var == pytest.approx(0.2 ** 2 / 2, rel=0.05)
+    assert out["W_fracao_micro"] < 0.2                                   # 1 mm é macro
+
+
+def test_wavelet_2d_anisotropy():
+    """Listras que variam ao longo da via -> anisotropia ≈ +1; através da via -> ≈ −1."""
+    pytest.importorskip("pywt")
+    dx = 0.011
+    cfg = tb.load_config(None)
+    yy, xx = np.mgrid[0:512, 0:1024] * dx
+    along = np.sin(2 * np.pi * xx / 1.0).astype(np.float32)             # varia com x (eixo 1 = via)
+    across = np.sin(2 * np.pi * yy / 1.0).astype(np.float32)            # varia com y (eixo 0 = largura)
+    a, _ = tb.wavelet_2d(along, dx, cfg)
+    c, _ = tb.wavelet_2d(across, dx, cfg)
+    assert a["W2_anisotropia_macro"] > 0.95 and c["W2_anisotropia_macro"] < -0.95

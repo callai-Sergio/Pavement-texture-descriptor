@@ -141,6 +141,42 @@ STRINGS: dict[str, dict[str, str]] = {
                   "pt": "Por segmento de 100 mm do perfil do MPD (processamento da ISO 13473-1 sem passa-baixa, média zero): "
                         "z_mid = (z_max + z_min)/2; g = D_cum onde z_mid cruza a curva. Valor reportado = média dos "
                         "segmentos (g_factor_media). g > 70 % ≈ textura negativa, < 50 % ≈ textura positiva."},
+    "pg_wavelets": {"en": "Wavelets (descriptive)", "de": "Wavelets (deskriptiv)", "pt": "Ondaletas (descritivo)"},
+    "tab_wavelets": {"en": "Wavelets", "de": "Wavelets", "pt": "Ondaletas"},
+    "w_section": {"en": "Wavelet texture analysis", "de": "Wavelet-Texturanalyse", "pt": "Textura por ondaletas"},
+    "no_wavelets": {"en": "No wavelet results in this project (core before v3.2).",
+                    "de": "Keine Wavelet-Ergebnisse in diesem Projekt (Kern vor v3.2).",
+                    "pt": "Sem resultados de ondaletas neste projeto (núcleo anterior à v3.2)."},
+    "w_profile_title": {"en": "Profile wavelet spectrum (driving direction, per octave)",
+                        "de": "Wavelet-Spektrum des Profils (Fahrtrichtung, je Oktave)",
+                        "pt": "Espectro de ondaletas do perfil (sentido da via, por oitava)"},
+    "w_2d_title": {"en": "2D wavelets on SL5: rms per direction and anisotropy",
+                   "de": "2D-Wavelets auf SL5: Effektivwert je Richtung und Anisotropie",
+                   "pt": "Ondaletas 2D na SL5: rms por direção e anisotropia"},
+    "w_2d_anis_title": {"en": "2D anisotropy per octave (+1 = along the road, −1 = across)",
+                        "de": "2D-Anisotropie je Oktave (+1 = in Fahrtrichtung, −1 = quer)",
+                        "pt": "Anisotropia 2D por oitava (+1 = ao longo da via, −1 = transversal)"},
+    "ax_lambda_octave": {"en": "λ octave centre [mm] (log scale)", "de": "λ Oktavmitte [mm] (log. Skala)",
+                         "pt": "λ centro da oitava [mm] (escala log)"},
+    "ax_w_level": {"en": "L_w [dB re 1 µm] per octave", "de": "L_w [dB re 1 µm] je Oktave",
+                   "pt": "L_w [dB ref. 1 µm] por oitava"},
+    "ax_rms_um": {"en": "rms [µm]", "de": "Effektivwert [µm]", "pt": "rms [µm]"},
+    "w_dir_road": {"en": "along road", "de": "in Fahrtrichtung", "pt": "ao longo da via"},
+    "w_dir_cross": {"en": "across road", "de": "quer zur Fahrtrichtung", "pt": "transversal"},
+    "w_dir_diag": {"en": "diagonal", "de": "diagonal", "pt": "diagonal"},
+    "w_anis": {"en": "anisotropy", "de": "Anisotropie", "pt": "anisotropia"},
+    "w_caption": {"en": "Descriptive (no standard): orthonormal DWT (Daubechies db4). Octave j covers λ between 2^j·dx and "
+                        "2^(j+1)·dx. Profile: native-resolution lines, one per 0.5 mm strip. 2D: SL5 surface; anisotropy = "
+                        "(E_along − E_across)/(E_along + E_across). Per octave, not comparable 1:1 with the one-third-octave "
+                        "spectrum (an octave holds three bands, ≈ +4.8 dB).",
+                  "de": "Deskriptiv (keine Norm): orthonormale DWT (Daubechies db4). Oktave j umfasst λ zwischen 2^j·dx und "
+                        "2^(j+1)·dx. Profil: Linien in nativer Auflösung, eine je 0,5-mm-Streifen. 2D: SL5-Oberfläche; "
+                        "Anisotropie = (E_längs − E_quer)/(E_längs + E_quer). Je Oktave, nicht 1:1 mit dem Terzspektrum "
+                        "vergleichbar (eine Oktave enthält drei Terzbänder, ≈ +4,8 dB).",
+                  "pt": "Descritivo (sem norma): DWT ortonormal (Daubechies db4). A oitava j cobre λ entre 2^j·dx e "
+                        "2^(j+1)·dx. Perfil: linhas na resolução nativa, uma por faixa de 0,5 mm. 2D: superfície SL5; "
+                        "anisotropia = (E_via − E_transv)/(E_via + E_transv). Por oitava, não comparável 1:1 com o "
+                        "espectro de terço de oitava (uma oitava contém três bandas, ≈ +4,8 dB)."},
     "pg_profile": {"en": "Profile (descriptive)", "de": "Profil (deskriptiv)", "pt": "Perfil (descritivo)"},
     "pg_hurst": {"en": "Hurst / fractal (descriptive)", "de": "Hurst / fraktal (deskriptiv)",
                  "pt": "Hurst / fractal (descritivo)"},

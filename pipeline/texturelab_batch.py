@@ -30,7 +30,7 @@ Projeto (pasta de saída, lida pelo app sem recalcular; formato em docs/FORMATO_
     Com --skip-done só são recalculados os arquivos cuja receita mudou (código, configuração ou LAZ).
     Com --zip a pasta também é empacotada em <saída>.tlproj (zip, sem pickle).
 
-Dependências: numpy, scipy, pandas, laspy[lazrs]   (Python >= 3.11)
+Dependências: numpy, scipy, pandas, laspy[lazrs], PyWavelets   (Python >= 3.11)
 
 Cadeias implementadas (todas sobre a grade em mm, eixo maior = sentido da via):
   A  MPD/MSD ................ ISO 13473-1:2019 (medição pontual): faixas 0,5 mm, reamostragem 0,5 mm,
@@ -42,6 +42,11 @@ Cadeias implementadas (todas sobre a grade em mm, eixo maior = sentido da via):
                                g = distribuição cumulativa (0 % no ponto mais alto) onde z_mid cruza a
                                curva de Abbott; média dos segmentos por ponto de medição (arquivo).
                                Assimetria = Rsk por segmento (ISO 13473-2), média = perfil_Rsk_media.
+  W  Ondaletas ............... descritivo, sem norma: DWT ortonormal (Daubechies db4, periodização).
+                               Perfil: linhas nativas (uma por faixa de 0,5 mm), energia por oitava
+                               λ ∈ [2^j·dx, 2^(j+1)·dx], em µm rms e dB re 1 µm; parcelas micro/macro.
+                               2D: superfície SL5, energia por oitava ao longo da via, transversal e
+                               diagonal; anisotropia = (E_via − E_transv)/(E_via + E_transv).
   E  Espectro ................ ISO 13473-4:2024 método 1: terços de oitava (IEC 61260-1, Butterworth),
                                ref. 1 µm, l >= 12·λmax, espelhamento Anexo F, spikes Anexo D.
   S  Areal ................... ISO 25178-3/-2 com gaussiano ISO 16610-61:
@@ -111,6 +116,10 @@ CFG = {
     "H_nperseg_mm": 90.0,           # segmento de Welch (potência de 2 em amostras)
     "H_bands_mm": {"micro": (0.05, 0.5), "macro": (0.5, 20.0)},   # faixas de comprimento de onda
     "H_n_bins": 20,                 # bins log-espaçados no ajuste
+    # ondaletas (descritivo, não normativo)
+    "W_wavelet": "db4",             # Daubechies 4 (ortonormal: energia dos coeficientes = variância)
+    "W_lambda_max_mm": 50.0,        # maior banda de perfil (limite superior da oitava)
+    "W_micro_limit_mm": 0.5,        # bandas com λ central < 0,5 mm contam como micro
     # saídas para o app (não alteram os parâmetros)
     "preview_step": 8,
     "V_abbott_points": 201,         # pontos da curva de Abbott-Firestone gravados por cadeia areal
@@ -674,6 +683,78 @@ def chain_hurst(Z: np.ndarray, dx: float, cfg: dict) -> tuple[dict, pd.DataFrame
 
 
 # ======================================================================================
+# Ondaletas — descritivo (sem norma)
+# ======================================================================================
+def _wavelet_bands(dx: float, levels: int) -> pd.DataFrame:
+    """Oitava do detalhe de nível j (1 = mais fino): λ entre 2^j·dx e 2^(j+1)·dx, centro geométrico."""
+    j = np.arange(1, levels + 1)
+    lo, hi = 2.0 ** j * dx, 2.0 ** (j + 1) * dx
+    return pd.DataFrame({"nivel": j, "lambda_min_mm": lo, "lambda_max_mm": hi, "lambda_centro_mm": np.sqrt(lo * hi)})
+
+
+def chain_wavelet_profile(Z: np.ndarray, dx: float, cfg: dict) -> tuple[dict, pd.DataFrame]:
+    """Espectro de ondaletas do perfil no sentido da via. Linhas na resolução nativa (sem média entre
+    linhas), uma a cada largura de faixa da cadeia A, tendência linear removida. DWT ortonormal com
+    periodização: soma(d_j²)/N = parcela da variância do perfil na oitava j."""
+    import pywt
+    k = max(1, int(np.ceil(cfg["A_strip_width_mm"] / dx - 1e-9)))
+    lines = Z[::k].astype(np.float64)
+    lines = lines[np.isfinite(lines).all(axis=1)]
+    if lines.shape[0] == 0:
+        return {"W_erro": "nenhuma linha sem valores inválidos"}, pd.DataFrame()
+    n = lines.shape[1]
+    t = np.arange(n, dtype=np.float64)
+    coef = np.polyfit(t, lines.T, 1)
+    lines -= (np.outer(coef[0], t) + coef[1][:, None])
+    w = pywt.Wavelet(cfg["W_wavelet"])
+    max_lev = pywt.dwt_max_level(n, w.dec_len)
+    levels = int(min(max_lev, np.floor(np.log2(cfg["W_lambda_max_mm"] / dx)) - 1))
+    c = pywt.wavedec(lines, w, mode="periodization", level=levels, axis=1)
+    bands = _wavelet_bands(dx, levels)
+    var = np.stack([(c[-j] ** 2).sum(axis=1) / n for j in range(1, levels + 1)], axis=1)   # [linhas, níveis]
+    with np.errstate(divide="ignore"):
+        L = 10 * np.log10(var / 1e-6)                                                     # (1 µm)² = 1e-6 mm²
+    bands["rms_um"] = np.sqrt(var.mean(axis=0)) * 1e3
+    bands["L_w_dB_media"] = 10 * np.log10(var.mean(axis=0) / 1e-6)
+    bands["L_w_dB_desvio"] = L.std(axis=0, ddof=1) if L.shape[0] > 1 else 0.0
+    bands["fracao_energia"] = var.mean(axis=0) / var.mean(axis=0).sum()
+    micro = bands["lambda_centro_mm"] < cfg["W_micro_limit_mm"]
+    out = {"W_n_linhas": int(lines.shape[0]), "W_ondaleta": cfg["W_wavelet"], "W_n_niveis": levels,
+           "W_rms_micro_um": float(np.sqrt(var.mean(axis=0)[micro.to_numpy()].sum()) * 1e3),
+           "W_rms_macro_um": float(np.sqrt(var.mean(axis=0)[~micro.to_numpy()].sum()) * 1e3),
+           "W_fracao_micro": float(bands.loc[micro, "fracao_energia"].sum())}
+    return out, bands
+
+
+def wavelet_2d(S: np.ndarray, dx: float, cfg: dict) -> tuple[dict, pd.DataFrame]:
+    """Energia de ondaletas 2D por oitava e direção (eixo 0 = largura, eixo 1 = via). pywt: cV = passa-alta
+    ao longo do eixo 1 -> variação no sentido da via; cH -> variação transversal; cD -> diagonal. Em float32
+    para limitar a memória. Níveis até a oitava cujo limite inferior fica abaixo do L do SL5."""
+    import pywt
+    w = pywt.Wavelet(cfg["W_wavelet"])
+    max_lev = pywt.dwt_max_level(min(S.shape), w.dec_len)
+    levels = int(min(max_lev, np.floor(np.log2(cfg["S_L_macro_mm"] / dx))))
+    c = pywt.wavedec2(np.ascontiguousarray(S, dtype=np.float32), w, mode="periodization", level=levels)
+    ncell = float(S.size)
+    bands = _wavelet_bands(dx, levels)
+    e = np.array([[float((c[-j][q].astype(np.float64) ** 2).sum()) / ncell for q in (1, 0, 2)]
+                  for j in range(1, levels + 1)])                                         # via, transversal, diagonal
+    del c
+    bands["rms_via_um"] = np.sqrt(e[:, 0]) * 1e3
+    bands["rms_transversal_um"] = np.sqrt(e[:, 1]) * 1e3
+    bands["rms_diagonal_um"] = np.sqrt(e[:, 2]) * 1e3
+    with np.errstate(invalid="ignore", divide="ignore"):
+        bands["anisotropia"] = (e[:, 0] - e[:, 1]) / (e[:, 0] + e[:, 1])
+    micro = (bands["lambda_centro_mm"] < cfg["W_micro_limit_mm"]).to_numpy()
+    out = {}
+    for name, m in (("micro", micro), ("macro", ~micro)):
+        ev, et = e[m, 0].sum(), e[m, 1].sum()
+        out[f"W2_anisotropia_{name}"] = float((ev - et) / (ev + et)) if ev + et > 0 else None
+    out["W2_n_niveis"] = levels
+    return out, bands
+
+
+# ======================================================================================
 # Areal — ISO 25178-3 / 25178-2
 # ======================================================================================
 def gauss(Z: np.ndarray, nesting_mm: float, dx: float) -> np.ndarray:
@@ -773,7 +854,8 @@ def areal_params(S: np.ndarray, dx: float, prefix: str, cfg: dict, acf: bool = T
     return {f"{prefix}_{k}": v for k, v in out.items()}
 
 
-def chain_areal(zbox: list, dx: float, cfg: dict, extras: dict | None = None) -> dict:
+def chain_areal(zbox: list, dx: float, cfg: dict, extras: dict | None = None,
+                tables: dict | None = None) -> dict:
     """Recebe a grade dentro de uma lista (zbox) para poder liberá-la no meio do cálculo.
     Ordem: MICRO primeiro (usa Z), depois SF e SL5; nunca mais de ~3 grades na memória.
     'extras' (opcional) recebe curvas de Abbott, histogramas e prévias filtradas para o app."""
@@ -807,6 +889,10 @@ def chain_areal(zbox: list, dx: float, cfg: dict, extras: dict | None = None) ->
     np.subtract(SF, SL, out=SL)                                        # SL = SF - gauss(SF)
     del SF
     out.update(areal_params(SL[m:-m, m:-m], dx, "SL5", cfg, extras=extras))
+    w2, df_w2 = wavelet_2d(SL[m:-m, m:-m], dx, cfg)                     # ondaletas 2D na SL5
+    out.update(w2)
+    if tables is not None:
+        tables["ondaletas_2d.csv"] = df_w2
     if extras is not None:
         st = cfg["preview_step"]
         extras["SL5_previa"] = SL[m:-m:st, m:-m:st].astype(np.float16)     # superfície filtrada (3D)
@@ -884,9 +970,14 @@ def process_file(path: str, out_root: str, cfg: dict, rec: dict | None = None) -
         del strips_a, strips_e
         t = time.time(); hu, df_psd = chain_hurst(Z, dx, cfg); tim["hurst_s"] = time.time() - t
         res.update(hu); df_psd.to_csv(od / "psd_media.csv", index=False)
+        t = time.time(); wv, df_wv = chain_wavelet_profile(Z, dx, cfg); tim["ondaletas_s"] = time.time() - t
+        res.update(wv); df_wv.to_csv(od / "ondaletas_perfil.csv", index=False)
         zbox = [Z]
         del Z                                                        # chain_areal libera a grade
-        t = time.time(); res.update(chain_areal(zbox, dx, cfg, extras=view)); tim["areal_s"] = time.time() - t
+        tables = {}
+        t = time.time(); res.update(chain_areal(zbox, dx, cfg, extras=view, tables=tables)); tim["areal_s"] = time.time() - t
+        for name, df_t in tables.items():
+            df_t.to_csv(od / name, index=False)
         np.savez_compressed(od / "previa.npz", z=previa, passo_mm=dx * s)
         np.savez_compressed(od / "visualizacao.npz", **view)
         res["status"] = "ok"
@@ -939,7 +1030,7 @@ def write_project_index(out: Path) -> dict:
 
 PROJECT_FILES = ("projeto.json", "resumo_geral.csv", "execucao.json", "resumo.json", "cadeiaA_segmentos.csv",
                  "espectro_terco_oitava.csv", "espectro_por_perfil.csv", "psd_media.csv", "previa.npz",
-                 "visualizacao.npz", "erro.txt")
+                 "visualizacao.npz", "ondaletas_perfil.csv", "ondaletas_2d.csv", "erro.txt")
 
 
 def pack_project(out: Path) -> Path:
