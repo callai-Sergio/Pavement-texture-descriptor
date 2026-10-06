@@ -85,8 +85,10 @@ DEFAULT_PARAMS = ["MPD", "ETD", "SF_Sq", "SL5_Sq", "SL5_Sdr_pct", "SL5_Ssk", "H_
 ID_COLS = ["arquivo", "trecho", "revestimento", "mp", "nr", "data"]
 # "section_surface" (trecho + revestimento) identifica cada pavimento: agrupa os 5 MPs da mesma superfície.
 # Trecho sozinho mistura revestimentos (A1, B244); revestimento sozinho junta trechos (SMA11, ISO).
+# As pistas ISO 10844 (IKA, ISO-A, ISO-C, ISO-P) são 4 superfícies distintas com o mesmo nome de camada
+# "ISO" no arquivo: no agrupamento por revestimento cada uma vira "ISO (<trecho>)" (coluna _revest_grupo).
 GROUP_OPTIONS = {"file": ["arquivo"], "section_surface": ["trecho", "revestimento"], "section": ["trecho"],
-                 "surface": ["revestimento"], "mp": ["mp"], "section_mp": ["trecho", "mp"]}
+                 "surface": ["_revest_grupo"], "mp": ["mp"], "section_mp": ["trecho", "mp"]}
 GROUPINGS = [g for g in GROUP_OPTIONS if g != "file"]   # agrupamentos com mais de um arquivo por grupo
 AREAL_CHAINS = ["SF", "SL5", "MICRO"]
 
@@ -106,7 +108,7 @@ def ch_label(code: str) -> str:
 def id_col_config() -> dict:
     """Rótulos traduzidos das colunas de identificação (os nomes no arquivo não mudam)."""
     names = {"arquivo": t("grp_file"), "trecho": t("grp_section"), "revestimento": t("grp_surface"),
-             "mp": "MP", "nr": t("col_nr"), "data": t("col_date")}
+             "mp": "MP", "nr": t("col_nr"), "data": t("col_date"), "_revest_grupo": t("grp_surface")}
     return {k: st.column_config.Column(v) for k, v in names.items()}
 
 
@@ -319,6 +321,9 @@ if proj is None:
 summary = proj.summary()
 ok = summary[summary.get("status", "ok") == "ok"].copy() if "status" in summary else summary.copy()
 params_all = numeric_params(ok)
+if "revestimento" in ok:
+    _rv = ok["revestimento"].astype(str)
+    ok["_revest_grupo"] = _rv.where(~_rv.str.upper().str.startswith("ISO"), "ISO (" + ok["trecho"].astype(str) + ")")
 
 with st.expander(t("filters"), expanded=False):
     fc = st.columns(3)
