@@ -141,7 +141,7 @@ def group_key(df: pd.DataFrame, cols: list[str]) -> pd.Series:
 
 
 RK_KEYS = ["Sk", "Spk", "Svk", "Smr1", "Smr2"]
-COLORS = px.colors.qualitative.Plotly
+COLORS = px.colors.qualitative.Dark24      # 24 cores distintas (16 superfícies sem repetir)
 
 
 def rk_table(df: pd.DataFrame, ch: str) -> pd.DataFrame:
@@ -184,18 +184,27 @@ def rk_overlay(fig: go.Figure, mr: np.ndarray, h: np.ndarray, p, color: str, gro
                                    f"{-sk / 100:.4f} mm/%<extra></extra>"], **pos)
 
 
+def log_lambda_axis(fig: go.Figure, lam, title: str) -> None:
+    """Eixo λ em escala log "papel log": décadas inteiras (ex.: 0,1–100 mm), marcas em 1-2-5 de cada
+    década, grade fina de 1 a 9 por década e linha mais forte em cada década. Crescente (menores λ à
+    esquerda)."""
+    lam = [float(x) for x in lam if float(x) > 0]
+    d0, d1 = int(np.floor(np.log10(min(lam)))), int(np.ceil(np.log10(max(lam))))
+    decades = range(d0, d1 + 1)
+    major = [m * 10.0 ** d for d in decades for m in (1, 2, 5) if m * 10.0 ** d <= 10.0 ** d1]
+    minor = [m * 10.0 ** d for d in decades for m in range(2, 10) if m * 10.0 ** d < 10.0 ** d1]
+    fig.update_xaxes(type="log", range=[d0, d1], tickvals=major, ticktext=[f"{x:g}" for x in major],
+                     showgrid=True, gridcolor="rgba(128,128,128,0.35)",
+                     minor=dict(tickvals=minor, showgrid=True, gridcolor="rgba(128,128,128,0.12)", ticks="outside",
+                                ticklen=3),
+                     title=title)
+    for d in decades:                                           # linhas de década mais fortes
+        fig.add_vline(x=10.0 ** d, line=dict(color="rgba(128,128,128,0.6)", width=1))
+
+
 def spectrum_axis(fig: go.Figure, lam) -> None:
-    """Eixo λ em escala log, crescente (menores λ perto da origem), rótulos nas bandas nominais."""
-    lam = sorted(set(float(x) for x in lam))
-    lo, hi = min(lam), max(lam)
-    decades = range(int(np.floor(np.log10(lo))), int(np.ceil(np.log10(hi))) + 1)
-    major = [m * 10.0 ** d for d in decades for m in (1, 2, 5) if lo * 0.95 <= m * 10.0 ** d <= hi * 1.05]
-    minor = [m * 10.0 ** d for d in decades for m in range(1, 10) if lo * 0.95 <= m * 10.0 ** d <= hi * 1.05]
-    fig.update_xaxes(type="log", tickvals=major, ticktext=[f"{x:g}" for x in major], showgrid=True,
-                     gridcolor="rgba(128,128,128,0.45)",
-                     minor=dict(tickvals=minor, showgrid=True, gridcolor="rgba(128,128,128,0.15)", ticks="outside"),
-                     range=[np.log10(lo) - 0.05, np.log10(hi) + 0.05],
-                     title=t("ax_lambda_band"))
+    """Eixo λ das bandas de terço de oitava (escala log, décadas inteiras)."""
+    log_lambda_axis(fig, lam, t("ax_lambda_band"))
 
 
 def abbott_grid(curves: list, ncols: int, yrange=None, height_row: int = 230, share_y: bool = True) -> go.Figure:
@@ -257,8 +266,7 @@ def all_spectra(_proj: Project, token: int) -> pd.DataFrame:
 
 def wavelet_axis(fig: go.Figure, lam) -> None:
     """Eixo λ (centro de cada oitava de ondaleta) em escala log, crescente."""
-    lam = sorted(set(float(x) for x in lam))
-    fig.update_xaxes(type="log", tickvals=lam, ticktext=[f"{x:.3g}" for x in lam], title=t("ax_lambda_octave"))
+    log_lambda_axis(fig, lam, t("ax_lambda_octave"))
 
 
 @st.cache_data(show_spinner=False, max_entries=8)
