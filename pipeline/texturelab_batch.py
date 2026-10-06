@@ -1036,7 +1036,7 @@ PROJECT_FILES = ("projeto.json", "resumo_geral.csv", "execucao.json", "resumo.js
 def pack_project(out: Path) -> Path:
     """Empacota só os arquivos do projeto (sem outras pastas de análise) em <saída>.tlproj (zip)."""
     out = Path(out)
-    dest = out.with_suffix(".tlproj")
+    dest = out.parent / (out.name + ".tlproj")      # não usar with_suffix: "Resultados_v3.2" tem ponto no nome
     with zipfile.ZipFile(dest, "w", compression=zipfile.ZIP_STORED) as z:   # NPZ já é comprimido
         z.write(out / "projeto.json", "projeto.json")
         proj = json.loads((out / "projeto.json").read_text(encoding="utf-8"))

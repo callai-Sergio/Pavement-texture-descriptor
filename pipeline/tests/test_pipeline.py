@@ -208,3 +208,14 @@ def test_wavelet_2d_anisotropy():
     a, _ = tb.wavelet_2d(along, dx, cfg)
     c, _ = tb.wavelet_2d(across, dx, cfg)
     assert a["W2_anisotropia_macro"] > 0.95 and c["W2_anisotropia_macro"] < -0.95
+
+
+def test_pack_name_with_dot(tmp_path, project):
+    """Pasta com ponto no nome (Resultados_v3.2) gera Resultados_v3.2.tlproj, sem sobrescrever outro pacote."""
+    import shutil
+    dotted = tmp_path / "Resultados_v3.2"
+    shutil.copytree(project["out"], dotted)
+    other = tmp_path / "Resultados_v3.tlproj"
+    other.write_bytes(b"antigo")
+    dest = tb.pack_project(dotted)
+    assert dest.name == "Resultados_v3.2.tlproj" and other.read_bytes() == b"antigo"
