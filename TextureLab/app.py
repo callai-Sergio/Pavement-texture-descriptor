@@ -27,7 +27,7 @@ sys.path.insert(0, str(ROOT))
 from components.i18n import LANGUAGES, DEFAULT_LANGUAGE, set_language, t  # noqa: E402
 from components.project_reader import Project, ProjectError  # noqa: E402
 
-APP_VERSION = "3.1.0"
+APP_VERSION = "3.2.0"
 APP_AUTHOR = "Sergio Callai"
 APP_YEAR = "2026"
 SHOW_PCA = False        # PCA desativada por enquanto na vista Estatística; True para reativar
@@ -58,7 +58,7 @@ st.markdown("""
 # Parâmetros e rótulos
 # ===================================================================
 UNITS = {
-    "MPD": "mm", "MPD_desvio": "mm", "ETD": "mm",
+    "MPD": "mm", "MPD_desvio": "mm", "g_factor_media": "%", "g_factor_desvio": "%",
     "perfil_Rq_media": "mm", "perfil_Rk_media": "mm", "perfil_Rpk_media": "mm", "perfil_Rvk_media": "mm",
     "perfil_Rmr1_media": "%", "perfil_Rmr2_media": "%",
 }
@@ -70,7 +70,8 @@ for _c in ("SF", "SL5", "MICRO"):
     UNITS[f"{_c}_Smr2"] = "%"
 
 PARAM_GROUPS = {
-    "chainA": ["MPD", "MPD_desvio", "ETD", "A_n_segmentos_validos"],
+    "chainA": ["MPD", "MPD_desvio", "A_n_segmentos_validos"],
+    "iso10844": ["g_factor_media", "g_factor_desvio", "perfil_Rsk_media"],
     "profile": ["perfil_Rq_media", "perfil_Rsk_media", "perfil_Rku_media", "perfil_Rk_media",
                             "perfil_Rpk_media", "perfil_Rvk_media", "perfil_Rmr1_media", "perfil_Rmr2_media"],
     "hurst": ["H_macro", "D_superficie_macro", "H_macro_R2",
@@ -81,7 +82,7 @@ _AREAL = ["Sa", "Sq", "Ssk", "Sku", "Sp", "Sv", "Sz", "Sdq", "Sdr_pct", "Sk", "S
 for _c in ("SF", "SL5", "MICRO"):
     PARAM_GROUPS[_c] = [f"{_c}_{p}" for p in _AREAL]
 
-DEFAULT_PARAMS = ["MPD", "ETD", "SF_Sq", "SL5_Sq", "SL5_Sdr_pct", "SL5_Ssk", "H_macro"]
+DEFAULT_PARAMS = ["MPD", "g_factor_media", "SF_Sq", "SL5_Sq", "SL5_Sdr_pct", "SL5_Ssk", "H_macro"]
 ID_COLS = ["arquivo", "trecho", "revestimento", "mp", "nr", "data"]
 # "section_surface" (trecho + revestimento) identifica cada pavimento: agrupa os 5 MPs da mesma superfície.
 # Trecho sozinho mistura revestimentos (A1, B244); revestimento sozinho junta trechos (SMA11, ISO).
@@ -350,7 +351,7 @@ view = st.segmented_control(t("view"), VIEWS, format_func=lambda v: t(f"view_{v}
 def view_summary():
     st.markdown(f"### {t('params_by_file')}")
     groups = st.multiselect(t("param_groups"), list(PARAM_GROUPS), format_func=pg_label,
-                            default=["chainA", "SL5"], key="sum_groups")
+                            default=["chainA", "iso10844", "SL5"], key="sum_groups")
     cols = [p for g in groups for p in PARAM_GROUPS[g] if p in ok]
     tbl = ok[[c for c in ID_COLS if c in ok] + cols]
     st.dataframe(tbl, hide_index=True, column_config={**id_col_config(),
@@ -432,7 +433,7 @@ def view_file():
         st.error(r.get("erro", t("calc_error")))
         return
     m = st.columns(6)
-    for c, k in zip(m, ["MPD", "ETD", "SF_Sq", "SL5_Sq", "SL5_Sdr_pct", "H_macro"]):
+    for c, k in zip(m, ["MPD", "g_factor_media", "SF_Sq", "SL5_Sq", "SL5_Sdr_pct", "H_macro"]):
         c.metric(label(k), fmt(r.get(k)))
     st.caption(t("file_caption", L=r.get("comprimento_mm", 0), W=r.get("largura_mm", 0), dx=r.get("dx_mm"),
                  n=r.get("n_pontos", 0) / 1e6, core=r.get("versao_script"), rec=r.get("receita_hash", "–")))
@@ -575,6 +576,28 @@ def view_file():
             c2.plotly_chart(px.scatter(val, x="x_centro_mm", y="MSD", color=val["segmento"].astype(str),
                                        title=t("msd_pos_title"),
                                        labels={"x_centro_mm": t("ax_pos_width"), "color": t("segment")}), key="msd_pos")
+            if "g_pct" in val:
+                st.markdown(f"#### {t('g_section')}")
+                c1, c2 = st.columns(2)
+                c1.plotly_chart(px.histogram(val, x="g_pct", nbins=30, title=t("g_hist_title"),
+                                             labels={"g_pct": "g [%]"}), key="g_hist")
+                if "g_seg_z" in v:
+                    gz = v["g_seg_z"].astype(float)
+                    d = np.arange(gz.size) * 100.0 / (gz.size - 1)
+                    gval, zmid = float(v["g_seg_g"]), float(v["g_seg_zmid"])
+                    fg = go.Figure(go.Scatter(x=d, y=gz, mode="lines", name=t("abbott_curves")))
+                    fg.add_hline(y=zmid, line=dict(dash="dashdot", color="gray"),
+                                 annotation_text=f"z_mid = {zmid:.3f} mm", annotation_position="top left")
+                    fg.add_vline(x=gval, line=dict(dash="dot", color="red"),
+                                 annotation_text=f"g = {gval:.1f} %", annotation_position="bottom left")
+                    fg.add_scatter(x=[gval], y=[zmid], mode="markers", marker=dict(size=12, symbol="circle-open",
+                                   color="red", line=dict(width=2)), showlegend=False)
+                    fg.update_layout(title=t("g_seg_title", y=float(v["g_seg_y_mm"]), x0=float(v["g_seg_inicio_mm"])),
+                                     xaxis_title=t("g_ax_dcum"), yaxis_title=t("ax_height"), height=420,
+                                     showlegend=False)
+                    fg.update_xaxes(range=[0, 100], dtick=10)
+                    c2.plotly_chart(fg, key="g_seg")
+                st.caption(t("g_caption"))
             st.dataframe(seg, hide_index=True)
     with tabs[6]:
         flat = {k: v_ for k, v_ in r.items() if not isinstance(v_, (dict, list))}

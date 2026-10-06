@@ -1,4 +1,4 @@
-# TextureLab Batch (v3.1.0)
+# TextureLab Batch (v3.2.0)
 
 Cálculo em lote, sem interface, dos descritores de textura de pavimento a partir de
 varreduras 3dT (LAZ). Núcleo conferido contra as normas ISO 13473-1:2019, 13473-4:2024,

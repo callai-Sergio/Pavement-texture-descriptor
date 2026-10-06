@@ -1,5 +1,17 @@
 # TextureLab Changelog
 
+## [3.2.0] - 2026-10-06
+
+### Added
+- **g-factor (shape factor)** per DIN ISO 10844:2024-11, clause 5.3.2 and Annex B: per 100 mm MPD segment (ISO 13473-1 processing without low-pass, zero mean), `g_pct` per segment in `cadeiaA_segmentos.csv`, `g_factor_media`/`g_factor_desvio`/`g_factor_n_segmentos` per file; example segment in `visualizacao.npz`. Unit tests with known answers.
+- Viewer: "DIN ISO 10844" parameter group (g-factor + skewness), g-factor histogram and an Annex B Figure B.3-style plot in the Segments tab, g-factor in the metric cards and default comparisons.
+
+### Removed
+- ETD (it is only 1.1·MPD) from the pipeline output, configuration and viewer.
+
+### Viewer (since 3.1.0)
+- English/German/Portuguese with language switch; Abbott grid with Smr1/Smr2 lines and values; true-scale 3D with vertical exaggeration; pavement grouping (section + surface course), ISO tracks kept separate; PCA hidden (SHOW_PCA).
+
 ## [3.1.0] - 2026-10-06
 
 ### Added

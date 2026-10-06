@@ -66,6 +66,7 @@ Arrays NumPy simples (lidos com `allow_pickle=False`).
 | `{SF,SL5,MICRO}_abbott_mr_pct`, `…_abbott_altura_mm` | (201,) | curva de Abbott-Firestone (altura em relação à média) |
 | `{SF,SL5,MICRO}_hist_bordas_mm`, `…_hist_contagem` | (121,), (120,) | histograma de alturas (PDF) |
 | `SL5_previa` | (ny/8, nx/8) | superfície SL5 filtrada (float16), para o 3D |
+| `g_seg_z`, `g_seg_zmid`, `g_seg_g`, `g_seg_faixa`, `g_seg_y_mm`, `g_seg_inicio_mm` | (n,), () | um segmento de 100 mm de exemplo para o g-factor (DIN ISO 10844 Anexo B): alturas ordenadas, z_mid, g (v3.2.0) |
 
 São subprodutos do mesmo cálculo e não alteram nenhum parâmetro. Com `V_n_profiles`,
 `V_abbott_points` etc. a quantidade gravada é ajustada (entram na receita).

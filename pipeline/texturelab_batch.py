@@ -33,9 +33,15 @@ Projeto (pasta de saída, lida pelo app sem recalcular; formato em docs/FORMATO_
 Dependências: numpy, scipy, pandas, laspy[lazrs]   (Python >= 3.11)
 
 Cadeias implementadas (todas sobre a grade em mm, eixo maior = sentido da via):
-  A  MPD/MSD/ETD ............ ISO 13473-1:2019 (medição pontual): faixas 0,5 mm, reamostragem 0,5 mm,
+  A  MPD/MSD ................ ISO 13473-1:2019 (medição pontual): faixas 0,5 mm, reamostragem 0,5 mm,
                                spikes Anexo E, passa-baixa Butterworth 2ª ordem projetado em 2,40 mm
-                               ida e volta (Tab. D.2), supressão de rampa por segmento, ETD = 1,1·MPD.
+                               ida e volta (Tab. D.2), supressão de rampa por segmento. (ETD = 1,1·MPD
+                               não é mais gravado: é só uma escala do MPD.)
+  G  g-factor e assimetria ... DIN ISO 10844:2024-11, 5.3.2 e Anexo B: por segmento de 100 mm do MPD,
+                               perfil da ISO 13473-1 sem passa-baixa, média zero; z_mid = (z_max+z_min)/2;
+                               g = distribuição cumulativa (0 % no ponto mais alto) onde z_mid cruza a
+                               curva de Abbott; média dos segmentos por ponto de medição (arquivo).
+                               Assimetria = Rsk por segmento (ISO 13473-2), média = perfil_Rsk_media.
   E  Espectro ................ ISO 13473-4:2024 método 1: terços de oitava (IEC 61260-1, Butterworth),
                                ref. 1 µm, l >= 12·λmax, espelhamento Anexo F, spikes Anexo D.
   S  Areal ................... ISO 25178-3/-2 com gaussiano ISO 16610-61:
@@ -76,7 +82,7 @@ import numpy as np
 import pandas as pd
 from scipy import ndimage, signal
 
-VERSION = "3.1.0"
+VERSION = "3.2.0"
 FORMAT_VERSION = 1              # formato do projeto (projeto.json / visualizacao.npz)
 
 _trapz = getattr(np, "trapezoid", None) or np.trapz   # numpy < 2.0
@@ -91,7 +97,6 @@ CFG = {
     "A_max_dropout_frac": 0.10,
     "A_max_spike_frac": 0.05,
     "A_extrap_max_mm": 5.0,
-    "ETD_factor": 1.1,
     # espectro (ISO 13473-4)
     "E_strip_width_mm": 0.5,
     "E_decimate_target_mm": 0.1,    # passo após anti-aliasing (múltiplo inteiro de dx)
@@ -369,6 +374,21 @@ def volume_params(h: np.ndarray, p: float = 10.0, q: float = 80.0, n: int = 1000
             "Vvc": float(vv(p) - vv(q)), "Vvv": float(vv(q))}
 
 
+def g_factor(seg: np.ndarray) -> tuple[float, np.ndarray, float]:
+    """Shape factor (g-factor), DIN ISO 10844:2024-11 Anexo B, de um segmento de 100 mm já processado
+    (ISO 13473-1 sem passa-baixa). B.1: média zero. B.2: ordena do mais alto ao mais baixo, z_mid =
+    (z_max + z_min)/2. B.3: D_cum,i = (i-1)·100 %/(n-1). B.4: g = D_cum onde z_mid cruza a curva
+    (interpolação linear entre os dois pontos vizinhos). Devolve (g [%], z ordenado, z_mid)."""
+    z = np.sort(seg[np.isfinite(seg)] - np.nanmean(seg))[::-1]
+    n = z.size
+    if n < 2 or z[0] == z[-1]:
+        return float("nan"), z, float("nan")
+    d = np.arange(n) * 100.0 / (n - 1)
+    z_mid = (z[0] + z[-1]) / 2.0
+    g = float(np.interp(-z_mid, -z, d))          # z decrescente -> -z crescente
+    return g, z, float(z_mid)
+
+
 def height_stats(h: np.ndarray, prefix: str) -> dict:
     h = h[np.isfinite(h)].astype(np.float64)
     h = h - h.mean()
@@ -507,6 +527,12 @@ def chain_a(Z: np.ndarray, dx: float, cfg: dict, strips=None, extras: dict | Non
                 r["MSD"] = float((seg[:half].max() + seg[half:].max()) / 2.0 - seg.mean())
                 raw = cleaned[i, a:b] - np.polyval(np.polyfit(t, cleaned[i, a:b], 1), t)
                 r.update(height_stats(raw, "R"))
+                g, gz, gmid = g_factor(raw)                                       # ISO 10844 Anexo B
+                r["g_pct"] = g
+                if extras is not None and "g_seg_z" not in extras and i >= P.shape[0] // 2:
+                    extras.update({"g_seg_z": gz.astype(np.float32), "g_seg_zmid": np.float64(gmid),
+                                   "g_seg_g": np.float64(g), "g_seg_faixa": np.int32(i),
+                                   "g_seg_y_mm": np.float64(centers[i]), "g_seg_inicio_mm": np.float64(a * step)})
                 r.update({("R" + k): v for k, v in rk_family(raw, 2001).items()})
             rows.append(r)
     df = pd.DataFrame(rows)
@@ -518,8 +544,12 @@ def chain_a(Z: np.ndarray, dx: float, cfg: dict, strips=None, extras: dict | Non
            "A_spike_frac_media": float(spikes.mean()), "A_dropout_frac_media": float(drop.mean())}
     if len(v):
         mpd = float(v["MSD"].mean())
-        out.update({"MPD": mpd, "MPD_desvio": float(v["MSD"].std(ddof=1)) if len(v) > 1 else 0.0,
-                    "ETD": cfg["ETD_factor"] * mpd})
+        out.update({"MPD": mpd, "MPD_desvio": float(v["MSD"].std(ddof=1)) if len(v) > 1 else 0.0})
+        gv = v["g_pct"].dropna() if "g_pct" in v else pd.Series(dtype=float)
+        if len(gv):
+            out.update({"g_factor_media": float(gv.mean()),
+                        "g_factor_desvio": float(gv.std(ddof=1)) if len(gv) > 1 else 0.0,
+                        "g_factor_n_segmentos": int(len(gv))})
         for k in ["Rq", "Rsk", "Rku", "Rk", "Rpk", "Rvk", "Rmr1", "Rmr2"]:
             if k in v:
                 out[f"perfil_{k}_media"] = float(v[k].mean())

@@ -119,6 +119,28 @@ STRINGS: dict[str, dict[str, str]] = {
 
     # ── grupos de parâmetros / cadeias ────────────────────────────────
     "pg_chainA": {"en": "Chain A – ISO 13473-1", "de": "Kette A – ISO 13473-1", "pt": "Cadeia A – ISO 13473-1"},
+    "pg_iso10844": {"en": "DIN ISO 10844:2024 – g-factor and skewness", "de": "DIN ISO 10844:2024 – g-Faktor und Schiefe",
+                    "pt": "DIN ISO 10844:2024 – g-factor e assimetria"},
+    "g_section": {"en": "Shape factor (g-factor) – DIN ISO 10844:2024, Annex B",
+                  "de": "Formfaktor (g-Faktor) – DIN ISO 10844:2024, Anhang B",
+                  "pt": "Fator de forma (g-factor) – DIN ISO 10844:2024, Anexo B"},
+    "g_hist_title": {"en": "g-factor per 100 mm segment (valid)", "de": "g-Faktor je 100-mm-Segment (gültig)",
+                     "pt": "g-factor por segmento de 100 mm (válidos)"},
+    "g_seg_title": {"en": "Example segment (strip y = {y:.1f} mm, from {x0:.0f} mm): bearing area curve and z_mid",
+                    "de": "Beispielsegment (Streifen y = {y:.1f} mm, ab {x0:.0f} mm): Abbott-Kurve und z_mid",
+                    "pt": "Segmento de exemplo (faixa y = {y:.1f} mm, a partir de {x0:.0f} mm): curva de Abbott e z_mid"},
+    "g_ax_dcum": {"en": "cumulative distribution D_cum [%] (0 % = highest point)",
+                  "de": "kumulative Verteilung D_cum [%] (0 % = höchster Punkt)",
+                  "pt": "distribuição cumulativa D_cum [%] (0 % = ponto mais alto)"},
+    "g_caption": {"en": "Per 100 mm segment of the MPD profile (ISO 13473-1 processing without low-pass, zero mean): "
+                        "z_mid = (z_max + z_min)/2; g = D_cum where z_mid crosses the curve. Reported value = mean of the "
+                        "segments (g_factor_media). g > 70 % ≈ negative texture, < 50 % ≈ positive texture.",
+                  "de": "Je 100-mm-Segment des MPD-Profils (Verarbeitung nach ISO 13473-1 ohne Tiefpass, Mittelwert null): "
+                        "z_mid = (z_max + z_min)/2; g = D_cum am Schnittpunkt von z_mid mit der Kurve. Angegebener Wert = "
+                        "Mittel der Segmente (g_factor_media). g > 70 % ≈ negative Textur, < 50 % ≈ positive Textur.",
+                  "pt": "Por segmento de 100 mm do perfil do MPD (processamento da ISO 13473-1 sem passa-baixa, média zero): "
+                        "z_mid = (z_max + z_min)/2; g = D_cum onde z_mid cruza a curva. Valor reportado = média dos "
+                        "segmentos (g_factor_media). g > 70 % ≈ textura negativa, < 50 % ≈ textura positiva."},
     "pg_profile": {"en": "Profile (descriptive)", "de": "Profil (deskriptiv)", "pt": "Perfil (descritivo)"},
     "pg_hurst": {"en": "Hurst / fractal (descriptive)", "de": "Hurst / fraktal (deskriptiv)",
                  "pt": "Hurst / fractal (descritivo)"},

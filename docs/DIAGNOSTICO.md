@@ -83,7 +83,7 @@ O cálculo de Hurst e dimensão fractal (acrescentado na v3.0.0) ainda não foi 
 ## 7. Pendências
 
 1. Migrar o aplicativo Streamlit para o núcleo do pipeline e remover o `pickle`.
-2. Conferir a ISO 10844 (g-factor, ENDT) e a ISO 21920-2 antes de reintroduzir esses parâmetros.
+2. ~~Conferir a ISO 10844 (g-factor, ENDT)~~: g-factor implementado na v3.2.0 conforme a DIN ISO 10844:2024-11 (5.3.2 e Anexo B); o ENDT saiu da norma na edição de 2021. Falta conferir a ISO 21920-2.
 3. Obter a resolução óptica do sensor do 3dT, ou estimá-la pela PSD medida, para tirar a microtextura do status provisório.
 4. Comparar os resultados com os do BATex 3dT-MM nos mesmos MPs.
 5. Aceleração em GPU (CuPy), validada contra a versão em CPU.

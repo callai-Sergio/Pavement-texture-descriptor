@@ -66,7 +66,8 @@ def test_results_and_viewer_data(project):
     r = json.loads((od / "resumo.json").read_text(encoding="utf-8"))
     assert r["versao_script"] == tb.VERSION
     assert r["receita"]["hash"] == r["receita_hash"]
-    assert 0 < r["MPD"] < 5 and r["ETD"] == pytest.approx(1.1 * r["MPD"])
+    assert 0 < r["MPD"] < 5 and "ETD" not in r
+    assert 0 < r["g_factor_media"] < 100 and r["g_factor_n_segmentos"] == r["A_n_segmentos_validos"]
     assert r["A_n_segmentos_validos"] > 0
     assert "H_macro" in r and "SL5_Sq" in r and "MICRO_Sq" in r
     for name in ("cadeiaA_segmentos.csv", "espectro_terco_oitava.csv", "psd_media.csv", "previa.npz",
@@ -80,13 +81,33 @@ def test_results_and_viewer_data(project):
             assert v[f"{ch}_hist_contagem"].sum() > 0
         assert v["A_perfil_limpo"].shape == v["A_perfil_passa_baixa"].shape
         assert v["SL5_previa"].ndim == 2
+        assert np.all(np.diff(v["g_seg_z"]) <= 0) and 0 < float(v["g_seg_g"]) < 100
+    seg = __import__("pandas").read_csv(od / "cadeiaA_segmentos.csv")
+    assert seg.loc[seg["valido"], "g_pct"].mean() == pytest.approx(r["g_factor_media"])
+
+
+def test_g_factor_annex_b():
+    """DIN ISO 10844:2024-11 Anexo B: casos com resposta conhecida."""
+    g, z, zmid = tb.g_factor(np.array([1.0, 0.0, -1.0]))             # D_cum = 0, 50, 100 %; z_mid = 0
+    assert g == pytest.approx(50.0) and zmid == pytest.approx(0.0) and list(z) == [1.0, 0.0, -1.0]
+    g, *_ = tb.g_factor(np.linspace(-1, 1, 201))                      # distribuição simétrica -> 50 %
+    assert g == pytest.approx(50.0)
+    plateau = np.zeros(200)
+    plateau[::20] = -2.0                                               # textura negativa: vales estreitos
+    g, _, zmid = tb.g_factor(plateau)
+    assert g > 85 and zmid < 0
+    g_pos, *_ = tb.g_factor(-plateau)                                  # textura positiva: picos estreitos
+    assert g_pos < 15
+    assert tb.g_factor(np.full(10, 3.0))[0] != tb.g_factor(np.full(10, 3.0))[0]   # perfil plano -> NaN
+    g1, *_ = tb.g_factor(plateau + 5.0)                                # média zero: independe do nível
+    assert g1 == pytest.approx(g)
 
 
 def test_recipe_decides_recalculation(project, tmp_path):
     f = str(sorted(project["laz"].glob("*.laz"))[0])
     out = project["out"]
     assert tb.is_current(out, f, tb.recipe(f, project["cfg"]))
-    cfg2 = dict(project["cfg"], ETD_factor=1.2)
+    cfg2 = dict(project["cfg"], A_spike_alpha=3.5)
     assert not tb.is_current(out, f, tb.recipe(f, cfg2))                # configuração mudou
     copy = tmp_path / Path(f).name
     copy.write_bytes(Path(f).read_bytes()[:-10] + b"0123456789")
@@ -95,12 +116,12 @@ def test_recipe_decides_recalculation(project, tmp_path):
 
 def test_load_config_rejects_unknown_keys(tmp_path):
     p = tmp_path / "c.json"
-    p.write_text('{"ETD_fator": 1.2}', encoding="utf-8")
+    p.write_text('{"A_spike_alfa": 3.5}', encoding="utf-8")
     with pytest.raises(SystemExit):
         tb.load_config(str(p))
-    p.write_text('{"ETD_factor": 1.2}', encoding="utf-8")
-    assert tb.load_config(str(p))["ETD_factor"] == 1.2
-    assert tb.CFG["ETD_factor"] == 1.1                                 # padrão intacto
+    p.write_text('{"A_spike_alpha": 3.5}', encoding="utf-8")
+    assert tb.load_config(str(p))["A_spike_alpha"] == 3.5
+    assert tb.CFG["A_spike_alpha"] == 3.0                              # padrão intacto
 
 
 def test_project_folder_and_zip_read_the_same(project):
