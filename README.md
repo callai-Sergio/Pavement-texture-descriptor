@@ -11,9 +11,12 @@ is a **viewer**: it opens the project and only renders tables, profiles, spectra
 PSD/Hurst, 3D surfaces, comparisons and PCA. Nothing is recalculated in the app.
 
 ```bash
-# server: compute (only files whose recipe changed are recomputed with --skip-done)
-python pipeline/texturelab_batch.py --input LAZ --output Resultados_v3 --skip-done --zip
-# PC: view
+# server: own venv + batch with CPU/RAM/disk limits (pause, resume, stop, status)
+pipeline/servidor.sh instalar
+pipeline/servidor.sh iniciar /path/LAZ /path/Resultados_v3
+pipeline/servidor.sh status
+# PC: own venv + viewer
+python -m venv .venv && .venv\Scripts\activate
 pip install -r TextureLab/requirements-viewer.txt
 streamlit run TextureLab/app.py        # then open Resultados_v3.tlproj or the folder
 ```

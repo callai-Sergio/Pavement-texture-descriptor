@@ -9,25 +9,50 @@ varreduras 3dT (LAZ). Núcleo conferido contra as normas ISO 13473-1:2019, 13473
 
 ## Fluxo: calcular no servidor, ver no PC
 
-1. Copie os LAZ para o servidor (ex.: `/data/callai/workspace/tyron/LAZ`).
-2. Rode o lote com a trava de memória (servidor compartilhado: limite de 25 GB, prioridade baixa
-   de CPU e disco):
+### No servidor (uma vez)
 
-   ```bash
-   cd /data/callai/workspace/tyron
-   nohup systemd-run --user --scope -p MemoryMax=25G -p MemorySwapMax=0 nice -n 19 ionice -c3 \
-     .venv/bin/python pipeline/texturelab_batch.py --input LAZ --output Resultados_v3 \
-     --workers 4 --skip-done --zip > processamento.log 2>&1 &
-   tail -f processamento.log
-   ```
+```bash
+cd /data/callai/workspace/tyron
+git clone -b feature/server-compute https://github.com/callai-Sergio/Pavement-texture-descriptor.git texturelab_repo
+cd texturelab_repo/pipeline
+./servidor.sh instalar          # venv próprio em pipeline/.venv, versões gravadas em .venv-versoes.txt
+loginctl enable-linger sergio   # o cálculo continua depois de sair do SSH
+```
 
-   São ~1,9 GB de pico e ~2 min por arquivo com o servidor livre (80 arquivos ≈ 45 min com 4 processos).
-   Com o servidor carregado demora mais.
-3. Copie o pacote para o PC e abra no app:
+O venv é só do pipeline (numpy, scipy, pandas, laspy). Os outros scripts da pasta não mexem nele, e
+os números não mudam por atualização de biblioteca feita para outra coisa. Para atualizar o código: `git pull`.
 
-   ```bash
-   scp sergio@137.226.169.235:/data/callai/workspace/tyron/Resultados_v3.tlproj .
-   ```
+### Calcular, com uso do servidor controlado
+
+```bash
+./servidor.sh iniciar /data/callai/workspace/tyron/LAZ /data/callai/workspace/tyron/Resultados_v3
+./servidor.sh status            # n/total, RAM e CPU em uso, estimativa de término, erros
+./servidor.sh pausar            # congela (libera CPU); ./servidor.sh continuar retoma
+./servidor.sh parar             # interrompe; iniciar de novo pula o que já terminou
+./servidor.sh log               # acompanha o log
+```
+
+Limites padrão (topo do script ou variável de ambiente, ex.: `CPU_NUCLEOS=8 ./servidor.sh iniciar`):
+
+| Limite | Padrão | Efeito |
+|---|---|---|
+| `CPU_NUCLEOS` | 4 | teto de CPU (`CPUQuota`) e número de processos; prioridade mínima (`nice 19`) |
+| `RAM_MAX` | 25G | acima disso o sistema encerra só este cálculo, nunca o de outros usuários |
+| `RAM_LIVRE_MIN_GB` | 30 | não inicia se o servidor tiver menos RAM disponível |
+| `DISCO_LIVRE_MIN_GB` | 20 | não inicia sem espaço em disco |
+| disco | `idle` | leitura e escrita só quando ninguém mais está usando o disco |
+
+São ~1,9 GB de pico e ~2 min por arquivo com o servidor livre. Com o servidor carregado demora mais.
+
+### No PC
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate                        # Linux/macOS: source .venv/bin/activate
+pip install -r TextureLab/requirements-viewer.txt
+scp sergio@137.226.169.235:/data/callai/workspace/tyron/Resultados_v3.tlproj .
+streamlit run TextureLab/app.py                # abra o Resultados_v3.tlproj na barra lateral
+```
 
 ## Opções
 

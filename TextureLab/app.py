@@ -184,12 +184,11 @@ SERVER_HELP = """
 **Fluxo:** o servidor calcula uma vez, o app só abre e desenha.
 
 1. Copie os LAZ para o servidor (pasta `LAZ/`).
-2. No servidor, rode o lote com a trava de memória (≈ 45 min para 80 arquivos com 4 processos):
+2. No servidor, rode o lote com uso controlado (CPU, RAM e disco limitados; ver `pipeline/README.md`):
 ```bash
-cd /data/callai/workspace/tyron
-nohup systemd-run --user --scope -p MemoryMax=25G -p MemorySwapMax=0 nice -n 19 ionice -c3 \\
-  .venv/bin/python pipeline/texturelab_batch.py --input LAZ --output Resultados_v3 \\
-  --workers 4 --skip-done --zip > processamento.log 2>&1 &
+cd /data/callai/workspace/tyron/texturelab_repo/pipeline
+./servidor.sh iniciar /data/callai/workspace/tyron/LAZ /data/callai/workspace/tyron/Resultados_v3
+./servidor.sh status        # também: pausar, continuar, parar, log
 ```
 3. Copie `Resultados_v3.tlproj` (ou a pasta `Resultados_v3`) para o PC, por `scp` ou Nextcloud:
 ```bash
@@ -198,7 +197,7 @@ scp sergio@137.226.169.235:/data/callai/workspace/tyron/Resultados_v3.tlproj .
 4. Abra aqui o `.tlproj` ou a pasta.
 
 `--skip-done` só recalcula o que mudou (versão do núcleo, configuração ou o próprio LAZ).
-Para outra configuração, passe `--config ajustes.json` (ex.: `{"A_lp_design_mm": 2.4}`) e uma pasta de saída nova.
+Para outra configuração: `EXTRA="--config ajustes.json" ./servidor.sh iniciar LAZ Resultados_outra` (ex.: `{"A_lp_design_mm": 2.4}`).
 """
 
 proj = _proj()
