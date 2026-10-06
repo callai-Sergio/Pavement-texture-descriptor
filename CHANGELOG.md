@@ -1,5 +1,44 @@
 # TextureLab Changelog
 
+## [3.2.0] - 2026-10-06
+
+### Added
+- **g-factor (shape factor)** per DIN ISO 10844:2024-11, clause 5.3.2 and Annex B: per 100 mm MPD segment (ISO 13473-1 processing without low-pass, zero mean), `g_pct` per segment in `cadeiaA_segmentos.csv`, `g_factor_media`/`g_factor_desvio`/`g_factor_n_segmentos` per file; example segment in `visualizacao.npz`. Unit tests with known answers.
+- Viewer: "DIN ISO 10844" parameter group (g-factor + skewness), g-factor histogram and an Annex B Figure B.3-style plot in the Segments tab, g-factor in the metric cards and default comparisons.
+
+- **Wavelet texture analysis** (descriptive, Daubechies db4): profile octave spectrum (`ondaletas_perfil.csv`, micro/macro shares) and 2D directional energies and anisotropy on SL5 (`ondaletas_2d.csv`). Pipeline dependency: PyWavelets.
+- White paper PDFs in `docs/pdf/` and the generator `tools/md2pdf.py` (Markdown + KaTeX → headless Chrome).
+
+### Fixed
+- `.tlproj` name for output folders with a dot (`Resultados_v3.2` was packed as `Resultados_v3.tlproj`, overwriting it).
+
+### Changed
+- Version 3.2.0 in pyproject, pipeline, viewer and desktop wrapper.
+
+### Removed
+- ETD (it is only 1.1·MPD) from the pipeline output, configuration and viewer.
+
+### Viewer (since 3.1.0)
+- English/German/Portuguese with language switch; Abbott grid with Smr1/Smr2 lines and values; true-scale 3D with vertical exaggeration; pavement grouping (section + surface course), ISO tracks kept separate; PCA hidden (SHOW_PCA).
+
+## [3.1.0] - 2026-10-06
+
+### Added
+- **Project format** (`docs/FORMATO_PROJETO.md`): the batch output folder (or a `.tlproj` zip) with `projeto.json` index, per-file `resumo.json`, CSVs, `previa.npz` and the new `visualizacao.npz` (Abbott curves, height histograms, chain-A profiles, native-resolution line, filtered SL5 preview). JSON/CSV/NPZ only, no pickle.
+- **Recipe** per result (core version + configuration + LAZ identity, hashed). `--skip-done` now recomputes only files whose recipe changed.
+- Pipeline options `--config` (JSON overrides, unknown keys rejected), `--zip` (pack `.tlproj`) and `--index-only` (index existing results, e.g. `Resultados_v2`, without recomputing).
+- `TextureLab/components/project_reader.py`: read-only project access (folder or zip, `allow_pickle=False`).
+- `pipeline/tests/test_pipeline.py`: synthetic LAZ end to end, recipe, folder/zip equivalence, legacy results, no unpickling, optional real-file regression.
+- `TextureLab/requirements-viewer.txt` (viewer only, no laspy/numba).
+
+### Changed
+- **Single core**: `pipeline/texturelab_batch.py` merges the v3.0.0 calculations, the memory/CPU optimizations of the server's v2 script (chunked LAZ reading, shared strips, in-place areal filters, block statistics, one material-ratio curve per surface, one process per file) and Hurst. On a real file all 92 parameters of the v2 results match exactly.
+- **`TextureLab/app.py` is now a viewer** of projects (summary, per-file surface/profiles/spectrum/Abbott/PSD/segments, group comparison, correlation and PCA). It no longer imports the v2.4.0 calculations. The desktop wrapper opens this viewer.
+- Worker count from *available* RAM and file size; `streamlit>=1.45`.
+
+### Moved
+- The previous computing app is kept unchanged as `TextureLab/app_legacy.py` (v2.4.0 calculations, see `docs/DIAGNOSTICO.md`).
+
 ## [3.0.0] - 2026-10-05
 
 ### Added

@@ -32,7 +32,11 @@ O script substitui o cálculo do aplicativo Streamlit TextureLab por um núcleo 
 | Rq, Rsk, Rku por segmento | — | Descritivo, não é ISO 21920 |
 | Expoente de Hurst e dimensão fractal (micro e macro) | — | Descritivo, sem norma; micro provisório |
 
-**Fora do escopo, de propósito:** g-factor e ENDT (ISO 10844) e os parâmetros de perfil da ISO 21920-2. Ainda não foram conferidos contra as normas, e o script não os calcula para não produzir números sem base normativa.
+**g-factor e assimetria (v3.2.0):** conforme a DIN ISO 10844:2024-11, cláusula 5.3.2 e Anexo B, por segmento de 100 mm do perfil do MPD (processamento da ISO 13473-1 sem passa-baixa, média zero); z_mid = (z_max + z_min)/2 e g = distribuição cumulativa onde z_mid cruza a curva de Abbott; média dos segmentos por ponto de medição (`g_factor_media`). A assimetria da 5.3.2 é o Rsk por segmento (ISO 13473-2), média em `perfil_Rsk_media`. O espectro da 5.3.3 pede bandas de 5 a 100 mm; com varreduras de ~257 mm e l ≥ 12·λ (ISO 13473-4) só as bandas até 20 mm são alcançáveis.
+
+**ETD:** a partir da v3.2.0 não é mais gravado (é só 1,1 · MPD).
+
+**Fora do escopo, de propósito:** ENDT (removido da ISO 10844 na edição de 2021) e os parâmetros de perfil da ISO 21920-2.
 
 ## 2. Dados de entrada
 
@@ -204,7 +208,8 @@ Alturas e volumes estão em mm (volumes em mm³/mm², que equivale a mm; multipl
 | --- | --- | --- |
 | Identificação | `arquivo`, `trecho`, `revestimento`, `mp`, `nr`, `data`, `caminho` | Tirados do nome e do caminho do arquivo |
 | Leitura | `n_pontos`, `n_largura`, `n_via`, `dx_mm`, `largura_mm`, `comprimento_mm`, `leitura`, `frac_invalidos`, avisos | Geometria lida; `leitura` = `reshape` (rápida) ou `generica` |
-| Cadeia A | `MPD`, `MPD_desvio`, `ETD` | Profundidade média de perfil, seu desvio-padrão entre segmentos e a profundidade de textura estimada (mm) |
+| Cadeia A | `MPD`, `MPD_desvio` | Profundidade média de perfil e seu desvio-padrão entre segmentos (mm); ETD = 1,1·MPD até a v3.1 |
+| ISO 10844 | `g_factor_media`, `g_factor_desvio`, `g_factor_n_segmentos`; `g_pct` por segmento | Fator de forma (%) por segmento de 100 mm, média e desvio por ponto de medição (v3.2.0) |
 | Cadeia A, controle | `A_n_faixas`, `A_n_segmentos_total`, `A_n_segmentos_validos`, `A_largura_faixa_mm`, `A_inicio_primeiro_segmento_mm`, `A_spike_frac_media`, `A_dropout_frac_media` | Quantos perfis e segmentos entraram no MPD e quanto foi corrigido |
 | Perfil (descritivo) | `perfil_Rq_media`, `perfil_Rsk_media`, `perfil_Rku_media`, `perfil_Rk_media`, `perfil_Rpk_media`, `perfil_Rvk_media`, `perfil_Rmr1_media`, `perfil_Rmr2_media` | Média dos segmentos válidos |
 | Espectro | `E_passo_mm`, `E_comprimento_avaliacao_mm`, `E_n_perfis`, `E_lambda_min_mm`, `E_lambda_max_mm`, `E_spike_frac_media` | Condições da análise; os níveis ficam nos CSV de espectro |

@@ -20,3 +20,6 @@ results/
 # Sistema
 .DS_Store
 Thumbs.db
+
+# Versões instaladas no venv do servidor (geradas por servidor.sh instalar)
+pipeline/.venv-versoes.txt

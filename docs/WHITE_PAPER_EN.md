@@ -32,7 +32,11 @@ The script replaces the calculations of the Streamlit TextureLab app with a sing
 | Rq, Rsk, Rku per segment | — | Descriptive, not ISO 21920 |
 | Hurst exponent and fractal dimension (micro and macro) | — | Descriptive, no standard; micro provisional |
 
-**Deliberately out of scope:** g-factor and ENDT (ISO 10844) and the ISO 21920-2 profile parameters. They have not yet been checked against the standards, and the script does not compute them to avoid producing numbers without a normative basis.
+**g-factor and skewness (v3.2.0):** per DIN ISO 10844:2024-11, clause 5.3.2 and Annex B, per 100 mm segment of the MPD profile (ISO 13473-1 processing without low-pass, zero mean); z_mid = (z_max + z_min)/2 and g = cumulative distribution where z_mid crosses the bearing area curve; mean of the segments per measuring point (`g_factor_media`). The skewness of 5.3.2 is the per-segment Rsk (ISO 13473-2), mean in `perfil_Rsk_media`. Clause 5.3.3 asks for bands from 5 to 100 mm; with ~257 mm scans and l ≥ 12·λ (ISO 13473-4) only bands up to 20 mm are reachable.
+
+**ETD:** no longer written from v3.2.0 (it is just 1.1 · MPD).
+
+**Deliberately out of scope:** ENDT (removed from ISO 10844 in the 2021 edition) and the ISO 21920-2 profile parameters.
 
 ## 2. Input data
 
@@ -204,7 +208,8 @@ Heights and volumes are in mm (volumes in mm³/mm², which equals mm; multiply b
 | --- | --- | --- |
 | Identification | `arquivo`, `trecho`, `revestimento`, `mp`, `nr`, `data`, `caminho` | File name, section, surface, MP, repeat, date and path |
 | Reading | `n_pontos`, `n_largura`, `n_via`, `dx_mm`, `largura_mm`, `comprimento_mm`, `leitura`, `frac_invalidos`, warnings | Geometry read; `leitura` = `reshape` (fast) or `generica` |
-| Chain A | `MPD`, `MPD_desvio`, `ETD` | Mean profile depth, its standard deviation across segments and estimated texture depth (mm) |
+| Chain A | `MPD`, `MPD_desvio` | Mean profile depth and its standard deviation across segments (mm); ETD = 1.1·MPD up to v3.1 |
+| ISO 10844 | `g_factor_media`, `g_factor_desvio`, `g_factor_n_segmentos`; `g_pct` per segment | Shape factor (%) per 100 mm segment, mean and std per measuring point (v3.2.0) |
 | Chain A, control | `A_n_faixas`, `A_n_segmentos_total`, `A_n_segmentos_validos`, `A_largura_faixa_mm`, `A_inicio_primeiro_segmento_mm`, `A_spike_frac_media`, `A_dropout_frac_media` | How many profiles and segments entered the MPD and how much was corrected |
 | Profile (descriptive) | `perfil_Rq_media`, `perfil_Rsk_media`, `perfil_Rku_media`, `perfil_Rk_media`, `perfil_Rpk_media`, `perfil_Rvk_media`, `perfil_Rmr1_media`, `perfil_Rmr2_media` | Mean over valid segments |
 | Spectrum | `E_passo_mm`, `E_comprimento_avaliacao_mm`, `E_n_perfis`, `E_lambda_min_mm`, `E_lambda_max_mm`, `E_spike_frac_media` | Analysis conditions; the levels are in the spectrum CSV files |

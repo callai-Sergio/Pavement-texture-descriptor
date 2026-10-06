@@ -1,0 +1,221 @@
+"""
+test_pipeline.py – Pipeline em lote, receita e leitura do projeto pelo app.
+
+Usa um LAZ sintético pequeno (220 × 20 mm, dx = 0,05 mm). Um teste opcional confere um arquivo real
+contra resultados já calculados: defina TEXTURELAB_REF_LAZ (arquivo .laz) e TEXTURELAB_REF_DIR
+(pasta com o resumo.json desse arquivo, ex.: Resultados_v2/A1/<arquivo>).
+"""
+import json
+import os
+import sys
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent))
+sys.path.insert(0, str(HERE.parent.parent / "TextureLab"))
+
+import texturelab_batch as tb  # noqa: E402
+from components.project_reader import Project  # noqa: E402
+
+laspy = pytest.importorskip("laspy")
+
+
+def _write_laz(path: Path, seed: int = 0, nx: int = 4400, ny: int = 400, dx: float = 0.05):
+    """Superfície auto-afim sintética gravada como grade completa (Y mais rápido), em mm."""
+    rng = np.random.default_rng(seed)
+    fy = np.fft.fftfreq(ny, dx)[:, None]
+    fx = np.fft.rfftfreq(nx, dx)[None, :]
+    f = np.hypot(fx, fy)
+    f[0, 0] = 1.0
+    spec = (rng.normal(size=f.shape) + 1j * rng.normal(size=f.shape)) * f ** -1.6
+    spec[0, 0] = 0
+    z = np.fft.irfft2(spec, s=(ny, nx))
+    z = z / z.std() * 0.4                                    # ~0,4 mm rms
+    xi, yi = np.meshgrid(np.arange(nx), np.arange(ny), indexing="ij")    # [x, y], Y mais rápido
+    hdr = laspy.LasHeader(point_format=0, version="1.2")
+    hdr.scales = np.array([1e-3, 1e-3, 1e-6])
+    hdr.offsets = np.array([0.0, 0.0, 0.0])
+    las = laspy.LasData(hdr)
+    las.X = (xi.ravel() * 50).astype(np.int32)              # 50 × 1e-3 = 0,05 mm
+    las.Y = (yi.ravel() * 50).astype(np.int32)
+    las.Z = np.round(z.T.ravel() / 1e-6).astype(np.int32)
+    las.write(str(path))
+
+
+@pytest.fixture(scope="module")
+def project(tmp_path_factory):
+    d = tmp_path_factory.mktemp("proj")
+    laz = d / "laz"
+    laz.mkdir()
+    for i, name in enumerate(["T1xx_AC_MP1_3DT_NR01_20240101", "T1xx_AC_MP2_3DT_NR01_20240101"]):
+        _write_laz(laz / f"{name}.laz", seed=i)
+    out = d / "out"
+    cfg = tb.load_config(None)
+    for f in sorted(laz.glob("*.laz")):
+        r = tb.process_file(str(f), str(out), cfg)
+        assert r["status"] == "ok", r.get("erro")
+    tb.write_project_index(out)
+    return {"laz": laz, "out": out, "cfg": cfg}
+
+
+def test_results_and_viewer_data(project):
+    od = project["out"] / "T1" / "T1xx_AC_MP1_3DT_NR01_20240101"
+    r = json.loads((od / "resumo.json").read_text(encoding="utf-8"))
+    assert r["versao_script"] == tb.VERSION
+    assert r["receita"]["hash"] == r["receita_hash"]
+    assert 0 < r["MPD"] < 5 and "ETD" not in r
+    assert 0 < r["g_factor_media"] < 100 and r["g_factor_n_segmentos"] == r["A_n_segmentos_validos"]
+    assert r["A_n_segmentos_validos"] > 0
+    assert "H_macro" in r and "SL5_Sq" in r and "MICRO_Sq" in r
+    assert 0 <= r["W_fracao_micro"] <= 1 and -1 <= r["W2_anisotropia_macro"] <= 1
+    for name in ("cadeiaA_segmentos.csv", "espectro_terco_oitava.csv", "psd_media.csv", "previa.npz",
+                 "visualizacao.npz", "ondaletas_perfil.csv", "ondaletas_2d.csv"):
+        assert (od / name).exists(), name
+    with np.load(od / "visualizacao.npz", allow_pickle=False) as v:
+        assert int(v["versao_formato"]) == tb.FORMAT_VERSION
+        for ch in ("SF", "SL5", "MICRO"):
+            mr, h = v[f"{ch}_abbott_mr_pct"], v[f"{ch}_abbott_altura_mm"]
+            assert mr[0] == 0 and mr[-1] == 100 and np.all(np.diff(h) <= 1e-6)    # curva decrescente
+            assert v[f"{ch}_hist_contagem"].sum() > 0
+        assert v["A_perfil_limpo"].shape == v["A_perfil_passa_baixa"].shape
+        assert v["SL5_previa"].ndim == 2
+        assert np.all(np.diff(v["g_seg_z"]) <= 0) and 0 < float(v["g_seg_g"]) < 100
+    seg = __import__("pandas").read_csv(od / "cadeiaA_segmentos.csv")
+    assert seg.loc[seg["valido"], "g_pct"].mean() == pytest.approx(r["g_factor_media"])
+
+
+def test_g_factor_annex_b():
+    """DIN ISO 10844:2024-11 Anexo B: casos com resposta conhecida."""
+    g, z, zmid = tb.g_factor(np.array([1.0, 0.0, -1.0]))             # D_cum = 0, 50, 100 %; z_mid = 0
+    assert g == pytest.approx(50.0) and zmid == pytest.approx(0.0) and list(z) == [1.0, 0.0, -1.0]
+    g, *_ = tb.g_factor(np.linspace(-1, 1, 201))                      # distribuição simétrica -> 50 %
+    assert g == pytest.approx(50.0)
+    plateau = np.zeros(200)
+    plateau[::20] = -2.0                                               # textura negativa: vales estreitos
+    g, _, zmid = tb.g_factor(plateau)
+    assert g > 85 and zmid < 0
+    g_pos, *_ = tb.g_factor(-plateau)                                  # textura positiva: picos estreitos
+    assert g_pos < 15
+    assert tb.g_factor(np.full(10, 3.0))[0] != tb.g_factor(np.full(10, 3.0))[0]   # perfil plano -> NaN
+    g1, *_ = tb.g_factor(plateau + 5.0)                                # média zero: independe do nível
+    assert g1 == pytest.approx(g)
+
+
+def test_recipe_decides_recalculation(project, tmp_path):
+    f = str(sorted(project["laz"].glob("*.laz"))[0])
+    out = project["out"]
+    assert tb.is_current(out, f, tb.recipe(f, project["cfg"]))
+    cfg2 = dict(project["cfg"], A_spike_alpha=3.5)
+    assert not tb.is_current(out, f, tb.recipe(f, cfg2))                # configuração mudou
+    copy = tmp_path / Path(f).name
+    copy.write_bytes(Path(f).read_bytes()[:-10] + b"0123456789")
+    assert tb.recipe(str(copy), project["cfg"])["hash"] != tb.recipe(f, project["cfg"])["hash"]  # LAZ mudou
+
+
+def test_load_config_rejects_unknown_keys(tmp_path):
+    p = tmp_path / "c.json"
+    p.write_text('{"A_spike_alfa": 3.5}', encoding="utf-8")
+    with pytest.raises(SystemExit):
+        tb.load_config(str(p))
+    p.write_text('{"A_spike_alpha": 3.5}', encoding="utf-8")
+    assert tb.load_config(str(p))["A_spike_alpha"] == 3.5
+    assert tb.CFG["A_spike_alpha"] == 3.0                              # padrão intacto
+
+
+def test_project_folder_and_zip_read_the_same(project):
+    out = project["out"]
+    meta = json.loads((out / "projeto.json").read_text(encoding="utf-8"))
+    assert meta["n_arquivos"] == 2 and meta["n_ok"] == 2 and all(i["visualizacao"] for i in meta["arquivos"])
+    pkg = tb.pack_project(out)
+    a, b, c = Project(out), Project(pkg), Project(pkg.read_bytes(), name=pkg.name)
+    for p in (a, b, c):
+        assert p.warnings == []
+        assert list(p.index["arquivo"]) == list(a.index["arquivo"])
+    arq = a.index["arquivo"][0]
+    assert a.summary().equals(b.summary()) and b.summary().equals(c.summary())
+    va, vb = a.view(arq), b.view(arq)
+    assert va.keys() == vb.keys() and all(np.array_equal(va[k], vb[k]) for k in va)
+    assert a.table(arq, "espectro_terco_oitava.csv").equals(b.table(arq, "espectro_terco_oitava.csv"))
+    z, step = b.preview(arq)
+    assert z.ndim == 2 and step > 0
+
+
+def test_old_results_without_index(project, tmp_path):
+    """Pasta antiga (sem projeto.json nem visualizacao.npz) abre com aviso, só leitura."""
+    src = project["out"] / "T1" / "T1xx_AC_MP1_3DT_NR01_20240101"
+    dst = tmp_path / "old" / "T1" / src.name
+    dst.mkdir(parents=True)
+    r = json.loads((src / "resumo.json").read_text(encoding="utf-8"))
+    r["versao_script"] = "2.0.0"
+    (dst / "resumo.json").write_text(json.dumps(r), encoding="utf-8")
+    p = Project(tmp_path / "old")
+    assert len(p.index) == 1 and not p.index["visualizacao"][0]
+    assert ("warn_old_core", {"vers": "2.0.0"}) in p.warnings and ("warn_no_index", {}) in p.warnings
+    assert p.view(p.index["arquivo"][0]) == {}
+    assert not (tmp_path / "old" / "projeto.json").exists()             # o app não grava nada
+
+
+def test_reader_never_unpickles(project, tmp_path):
+    out = project["out"]
+    arq = Project(out).index["arquivo"][0]
+    bad = tmp_path / "bad"
+    import shutil
+    shutil.copytree(out, bad)
+    folder = bad / Project(bad).index["pasta"][0]
+    np.savez(folder / "visualizacao.npz", x=np.array([{"a": 1}], dtype=object))
+    with pytest.raises(ValueError):
+        Project(bad).view(arq)
+
+
+@pytest.mark.skipif(not (os.environ.get("TEXTURELAB_REF_LAZ") and os.environ.get("TEXTURELAB_REF_DIR")),
+                    reason="defina TEXTURELAB_REF_LAZ e TEXTURELAB_REF_DIR para o teste com arquivo real")
+def test_real_file_matches_reference(tmp_path):
+    laz, ref_dir = os.environ["TEXTURELAB_REF_LAZ"], Path(os.environ["TEXTURELAB_REF_DIR"])
+    r = tb.process_file(laz, str(tmp_path), tb.load_config(None))
+    ref = json.loads((ref_dir / "resumo.json").read_text(encoding="utf-8"))
+    assert r["status"] == "ok"
+    for k, v in ref.items():
+        if isinstance(v, float) and not k.endswith("_s") and k != "pico_memoria_processo_gb":
+            assert r[k] == pytest.approx(v, rel=1e-9, abs=1e-12), k
+
+
+def test_wavelet_profile_band_and_energy():
+    """Senoide de λ = 1 mm cai na oitava [0,704; 1,408] mm (dx = 0,011 mm); a energia somada nas
+    oitavas recupera a variância do perfil."""
+    pytest.importorskip("pywt")
+    dx, n = 0.011, 23000
+    x = np.arange(n) * dx
+    Z = np.tile(0.2 * np.sin(2 * np.pi * x / 1.0), (60, 1)).astype(np.float32)
+    out, b = tb.chain_wavelet_profile(Z, dx, tb.load_config(None))
+    top = b.loc[b["fracao_energia"].idxmax()]
+    assert top["lambda_min_mm"] <= 1.0 <= top["lambda_max_mm"] and top["fracao_energia"] > 0.8
+    var = (b["rms_um"] ** 2).sum() * 1e-6
+    assert var == pytest.approx(0.2 ** 2 / 2, rel=0.05)
+    assert out["W_fracao_micro"] < 0.2                                   # 1 mm é macro
+
+
+def test_wavelet_2d_anisotropy():
+    """Listras que variam ao longo da via -> anisotropia ≈ +1; através da via -> ≈ −1."""
+    pytest.importorskip("pywt")
+    dx = 0.011
+    cfg = tb.load_config(None)
+    yy, xx = np.mgrid[0:512, 0:1024] * dx
+    along = np.sin(2 * np.pi * xx / 1.0).astype(np.float32)             # varia com x (eixo 1 = via)
+    across = np.sin(2 * np.pi * yy / 1.0).astype(np.float32)            # varia com y (eixo 0 = largura)
+    a, _ = tb.wavelet_2d(along, dx, cfg)
+    c, _ = tb.wavelet_2d(across, dx, cfg)
+    assert a["W2_anisotropia_macro"] > 0.95 and c["W2_anisotropia_macro"] < -0.95
+
+
+def test_pack_name_with_dot(tmp_path, project):
+    """Pasta com ponto no nome (Resultados_v3.2) gera Resultados_v3.2.tlproj, sem sobrescrever outro pacote."""
+    import shutil
+    dotted = tmp_path / "Resultados_v3.2"
+    shutil.copytree(project["out"], dotted)
+    other = tmp_path / "Resultados_v3.tlproj"
+    other.write_bytes(b"antigo")
+    dest = tb.pack_project(dotted)
+    assert dest.name == "Resultados_v3.2.tlproj" and other.read_bytes() == b"antigo"
