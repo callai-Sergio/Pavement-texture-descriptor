@@ -73,8 +73,13 @@ status() {
     # shellcheck disable=SC1090
     source "$ESTADO"
     local estado
-    estado=$(systemctl --user show "$UNIDADE.service" -p ActiveState -p FreezerState --value 2>/dev/null | paste -sd/ -)
-    [ -n "$estado" ] || estado="encerrado"
+    if ! ativo; then
+        estado="encerrado"
+    elif [ "$(systemctl --user show "$UNIDADE.service" -p FreezerState --value)" = "frozen" ]; then
+        estado="pausado"
+    else
+        estado="rodando"
+    fi
     echo "Estado:  $estado   (unidade $UNIDADE)"
     echo "Saída:   $SAIDA"
     if ativo; then
