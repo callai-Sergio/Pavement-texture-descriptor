@@ -30,6 +30,7 @@ from components.project_reader import Project, ProjectError  # noqa: E402
 APP_VERSION = "3.1.0"
 APP_AUTHOR = "Sergio Callai"
 APP_YEAR = "2026"
+SHOW_PCA = False        # PCA desativada por enquanto na vista Estatística; True para reativar
 
 st.set_page_config(page_title="TextureLab", page_icon="🔬", layout="wide")
 
@@ -711,6 +712,8 @@ def view_stats():
     fig.update_layout(height=450)
     st.plotly_chart(fig, key="st_scatter")
 
+    if not SHOW_PCA:
+        return
     st.markdown(f"### {t('pca_title')}")
     Xc = X.dropna()
     if len(Xc) < 3:
