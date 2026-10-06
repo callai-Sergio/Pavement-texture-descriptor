@@ -22,7 +22,11 @@ INDEX_COLUMNS = ["arquivo", "trecho", "revestimento", "mp", "nr", "data", "pasta
 
 
 class ProjectError(Exception):
-    pass
+    """Erro de abertura com código traduzível (components/i18n.py) e valores para o texto."""
+
+    def __init__(self, key: str, **kw):
+        super().__init__(key, kw)
+        self.key, self.kw = key, kw
 
 
 class Project:
@@ -41,7 +45,7 @@ class Project:
             elif p.is_dir():
                 self._root = p
             else:
-                raise ProjectError(f"'{p}' não é uma pasta de projeto nem um arquivo .tlproj")
+                raise ProjectError("err_not_project", path=str(p))
             self.name = name or p.name
         if self._zip is not None:
             self._names = set(self._zip.namelist())
@@ -69,10 +73,9 @@ class Project:
         if self._exists("projeto.json"):
             meta = json.loads(self._read("projeto.json"))
             if meta.get("formato") != "texturelab-projeto":
-                raise ProjectError("projeto.json não é de um projeto TextureLab")
+                raise ProjectError("err_bad_index")
             if int(meta.get("versao_formato", 0)) > SUPPORTED_FORMAT:
-                raise ProjectError(f"formato {meta['versao_formato']} é mais novo que este app "
-                                   f"(suporta até {SUPPORTED_FORMAT}): atualize o app")
+                raise ProjectError("err_format_newer", fmt=meta["versao_formato"], sup=SUPPORTED_FORMAT)
             return meta
         # Resultados antigos sem projeto.json: monta o índice só para leitura.
         items = []
@@ -88,12 +91,12 @@ class Project:
                           "versao_nucleo": d.get("versao_script", ""), "receita_hash": d.get("receita_hash", ""),
                           "visualizacao": self._exists(f"{folder}/visualizacao.npz")})
         if not items:
-            raise ProjectError("nenhum resumo.json encontrado: isto não parece um projeto")
+            raise ProjectError("err_no_results")
         versions = sorted({i["versao_nucleo"] for i in items if i["versao_nucleo"]})
         return {"formato": "texturelab-projeto", "versao_formato": 0, "versao_nucleo": "",
                 "versoes_nos_resultados": versions, "config": {}, "n_arquivos": len(items),
                 "n_ok": sum(i["status"] == "ok" for i in items), "arquivos": items,
-                "aviso": "pasta sem projeto.json (resultados antigos): índice montado na leitura"}
+                "sem_indice": True}
 
     def _folder(self, arquivo: str) -> str:
         row = self.index.loc[self.index["arquivo"] == arquivo]
@@ -103,17 +106,19 @@ class Project:
 
     # ── conteúdo ───────────────────────────────────────────────────────
     @property
-    def warnings(self) -> list[str]:
+    def warnings(self) -> list[tuple[str, dict]]:
+        """Avisos como (código, valores), traduzidos pelo app (components/i18n.py)."""
         w = []
-        if self.meta.get("aviso"):
-            w.append(self.meta["aviso"])
+        if self.meta.get("sem_indice"):
+            w.append(("warn_no_index", {}))
         vers = self.meta.get("versoes_nos_resultados", [])
+        if len(vers) > 1:
+            w.append(("warn_mixed", {}))
         if any(v and v < "3" for v in vers):
-            w.append(f"resultados calculados com núcleo {', '.join(vers)}: sem Hurst e sem dados de "
-                     "visualização (Abbott, perfis); recalcule no servidor com a versão atual")
+            w.append(("warn_old_core", {"vers": ", ".join(vers)}))
         n_err = int((self.index["status"] != "ok").sum())
         if n_err:
-            w.append(f"{n_err} arquivo(s) com erro no cálculo")
+            w.append(("warn_errors", {"n": n_err}))
         return w
 
     def summary(self) -> pd.DataFrame:

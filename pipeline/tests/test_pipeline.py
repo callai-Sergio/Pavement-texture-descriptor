@@ -131,7 +131,7 @@ def test_old_results_without_index(project, tmp_path):
     (dst / "resumo.json").write_text(json.dumps(r), encoding="utf-8")
     p = Project(tmp_path / "old")
     assert len(p.index) == 1 and not p.index["visualizacao"][0]
-    assert any("2.0.0" in w for w in p.warnings)
+    assert ("warn_old_core", {"vers": "2.0.0"}) in p.warnings and ("warn_no_index", {}) in p.warnings
     assert p.view(p.index["arquivo"][0]) == {}
     assert not (tmp_path / "old" / "projeto.json").exists()             # o app não grava nada
 
