@@ -146,9 +146,10 @@ def rk_table(df: pd.DataFrame, ch: str) -> pd.DataFrame:
 
 
 def rk_overlay(fig: go.Figure, mr: np.ndarray, h: np.ndarray, p, color: str, group: str,
-               labels: bool = True, **pos) -> None:
-    """Desenha sobre a curva de Abbott a reta equivalente e os pontos Smr1/Smr2 (só desenho:
-    Sk, Smr1 e Smr2 vêm do resumo.json). O topo do núcleo é a altura da curva em Smr1."""
+               labels: bool = True, annotate: bool = False, **pos) -> None:
+    """Desenha sobre a curva de Abbott a reta equivalente, os pontos Smr1/Smr2 e linhas verticais
+    em Smr1 e Smr2 (só desenho: Sk, Smr1 e Smr2 vêm do resumo.json). O topo do núcleo é a altura da
+    curva em Smr1. 'annotate' escreve os valores (Smr1, Smr2, Sk e inclinação) no gráfico."""
     sk, mr1, mr2 = (float(p.get(k, np.nan)) for k in ("Sk", "Smr1", "Smr2"))
     if not np.all(np.isfinite([sk, mr1, mr2])):
         return
@@ -156,6 +157,14 @@ def rk_overlay(fig: go.Figure, mr: np.ndarray, h: np.ndarray, p, color: str, gro
     z_bot = z_top - sk
     fig.add_scatter(x=[0, 100], y=[z_top, z_bot], mode="lines", line=dict(color=color, dash="dash", width=1),
                     legendgroup=group, showlegend=False, hoverinfo="skip", **pos)
+    for x, name, side in ((mr1, "Smr1", "right"), (mr2, "Smr2", "left")):
+        fig.add_vline(x=x, line=dict(color=color, dash="dot", width=1), opacity=0.8,
+                      annotation_text=f"{name} = {x:.1f} %" if annotate else None,
+                      annotation_position=f"top {side}", annotation_font=dict(size=9), **pos)
+    if annotate:
+        fig.add_annotation(x=50, y=z_top - sk / 2, text=f"Sk = {sk:.3f} mm<br>{t('slope')} = {-sk / 100:.4f} mm/%",
+                           showarrow=False, yshift=18, font=dict(size=9),
+                           bgcolor="rgba(128,128,128,0.12)", bordercolor=color, borderwidth=1, **pos)
     fig.add_scatter(x=[mr1, mr2], y=[z_top, z_bot], mode="markers+text" if labels else "markers",
                     legendgroup=group, showlegend=False,
                     marker=dict(color=color, size=9, symbol="diamond", line=dict(width=1, color="white")),
@@ -185,19 +194,21 @@ def abbott_grid(curves: list, ncols: int, yrange=None, height_row: int = 230, sh
     curves = [(titulo, mr, altura, params, cor)]."""
     n = len(curves)
     nrows = int(np.ceil(n / ncols))
-    fig = make_subplots(rows=nrows, cols=ncols, shared_xaxes=True, shared_yaxes=share_y,
-                        subplot_titles=[c[0] for c in curves], horizontal_spacing=0.03,
-                        vertical_spacing=min(0.08, 0.35 / max(1, nrows)))
+    fig = make_subplots(rows=nrows, cols=ncols, shared_xaxes=False, shared_yaxes=share_y,   # eixo x numerado em todos
+                        subplot_titles=[c[0] for c in curves], horizontal_spacing=0.04,
+                        vertical_spacing=min(0.12, 0.6 / max(1, nrows)))
     for i, (title, mr, h, p, col) in enumerate(curves):
         r, c = i // ncols + 1, i % ncols + 1
         fig.add_scatter(x=mr, y=h, name=title, line=dict(color=col), showlegend=False, row=r, col=c)
         if p is not None:
-            rk_overlay(fig, mr, h, p, col, title, labels=False, row=r, col=c)
-    fig.update_annotations(font_size=10)
+            rk_overlay(fig, mr, h, p, col, title, labels=False, annotate=True, row=r, col=c)
+    titles = {c[0] for c in curves}
+    fig.for_each_annotation(lambda a: a.update(font_size=10) if a.text in titles else None)   # títulos
     if yrange is not None:
         fig.update_yaxes(range=yrange)
     fig.update_xaxes(range=[0, 100], dtick=20)
-    fig.update_layout(height=max(300, height_row * nrows + 60), margin=dict(t=40, l=40, r=10, b=40))
+    fig.update_xaxes(showticklabels=True, ticksuffix=" %")
+    fig.update_layout(height=max(300, (height_row + 40) * nrows + 60), margin=dict(t=40, l=40, r=10, b=40))
     return fig
 
 
