@@ -101,6 +101,48 @@ def group_key(df: pd.DataFrame, cols: list[str]) -> pd.Series:
     return df[cols].astype(str).agg(" · ".join, axis=1)
 
 
+RK_KEYS = ["Sk", "Spk", "Svk", "Smr1", "Smr2"]
+COLORS = px.colors.qualitative.Plotly
+
+
+def rk_table(df: pd.DataFrame, ch: str) -> pd.DataFrame:
+    """Família Sk (ISO 13565-2) já calculada no servidor + inclinação da reta equivalente.
+    A reta vai de (0 %, topo do núcleo) a (100 %, base do núcleo): inclinação = -Sk / 100 % [mm/%]."""
+    cols = {f"{ch}_{k}": k for k in RK_KEYS + ["Vmp", "Vmc", "Vvc", "Vvv"] if f"{ch}_{k}" in df}
+    t = df[list(cols)].rename(columns=cols)
+    if "Sk" in t:
+        t.insert(min(5, t.shape[1]), "inclinacao_mm_por_pct", -t["Sk"] / 100.0)
+    return t
+
+
+def rk_overlay(fig: go.Figure, mr: np.ndarray, h: np.ndarray, p, color: str, group: str,
+               labels: bool = True) -> None:
+    """Desenha sobre a curva de Abbott a reta equivalente e os pontos Smr1/Smr2 (só desenho:
+    Sk, Smr1 e Smr2 vêm do resumo.json). O topo do núcleo é a altura da curva em Smr1."""
+    sk, mr1, mr2 = (float(p.get(k, np.nan)) for k in ("Sk", "Smr1", "Smr2"))
+    if not np.all(np.isfinite([sk, mr1, mr2])):
+        return
+    z_top = float(np.interp(mr1, mr, h))
+    z_bot = z_top - sk
+    fig.add_scatter(x=[0, 100], y=[z_top, z_bot], mode="lines", line=dict(color=color, dash="dash", width=1),
+                    legendgroup=group, showlegend=False, hoverinfo="skip")
+    fig.add_scatter(x=[mr1, mr2], y=[z_top, z_bot], mode="markers+text" if labels else "markers",
+                    legendgroup=group, showlegend=False,
+                    marker=dict(color=color, size=9, symbol="diamond", line=dict(width=1, color="white")),
+                    text=["Smr1", "Smr2"], textposition=["top right", "bottom left"],
+                    textfont=dict(size=10, color=color),
+                    hovertemplate=[f"{group}<br>Smr1 = {mr1:.1f} %<br>topo do núcleo = {z_top:.3f} mm<extra></extra>",
+                                   f"{group}<br>Smr2 = {mr2:.1f} %<br>Sk = {sk:.3f} mm<br>inclinação = "
+                                   f"{-sk / 100:.4f} mm/%<extra></extra>"])
+
+
+def spectrum_axis(fig: go.Figure, lam) -> None:
+    """Eixo λ em escala log, crescente (menores λ perto da origem), rótulos nas bandas nominais."""
+    lam = sorted(set(float(x) for x in lam))
+    fig.update_xaxes(type="log", tickvals=lam, ticktext=[f"{x:g}" for x in lam],
+                     title="λ centro do terço de oitava [mm] (escala log)")
+
+
 # ===================================================================
 # Estado e carregamento
 # ===================================================================
@@ -376,8 +418,7 @@ def view_file():
         if sp is not None and len(sp):
             fig = go.Figure(go.Scatter(x=sp["lambda_centro_mm"], y=sp["L_tx_dB_media"], mode="lines+markers",
                                        error_y=dict(array=sp["L_tx_dB_desvio"], visible=True), name="média ± dp"))
-            fig.update_xaxes(type="log", autorange="reversed", title="λ centro do terço de oitava [mm]",
-                             tickvals=sp["lambda_centro_mm"], ticktext=[f"{x:g}" for x in sp["lambda_centro_mm"]])
+            spectrum_axis(fig, sp["lambda_centro_mm"])
             fig.update_layout(yaxis_title="L_tx [dB ref. 1 µm]", height=420,
                               title="Espectro de textura – ISO 13473-4 (método 1)")
             st.plotly_chart(fig, key="spec")
@@ -387,8 +428,11 @@ def view_file():
         if chains:
             c1, c2 = st.columns(2)
             fa, fh = go.Figure(), go.Figure()
-            for ch in chains:
-                fa.add_scatter(x=v[f"{ch}_abbott_mr_pct"], y=v[f"{ch}_abbott_altura_mm"], name=AREAL_CHAINS[ch])
+            for i, ch in enumerate(chains):
+                col = COLORS[i % len(COLORS)]
+                mr, h = v[f"{ch}_abbott_mr_pct"], v[f"{ch}_abbott_altura_mm"]
+                fa.add_scatter(x=mr, y=h, name=AREAL_CHAINS[ch], line=dict(color=col), legendgroup=ch)
+                rk_overlay(fa, mr, h, {k: r.get(f"{ch}_{k}", np.nan) for k in RK_KEYS}, col, ch)
                 e = v[f"{ch}_hist_bordas_mm"]
                 cnt = v[f"{ch}_hist_contagem"].astype(float)
                 dens = cnt / (cnt.sum() * np.diff(e))
@@ -399,9 +443,10 @@ def view_file():
                              yaxis_title="densidade [1/mm]", height=420)
             c1.plotly_chart(fa, key="abbott")
             c2.plotly_chart(fh, key="hist")
-            rk = pd.DataFrame({AREAL_CHAINS[ch]: {k: r.get(f"{ch}_{k}") for k in
-                                                  ["Sk", "Spk", "Svk", "Smr1", "Smr2", "Vmp", "Vmc", "Vvc", "Vvv"]}
-                               for ch in chains})
+            one = pd.DataFrame([r])
+            rk = pd.concat({AREAL_CHAINS[ch]: rk_table(one, ch).iloc[0] for ch in chains}, axis=1)
+            st.caption("Tracejado: reta equivalente da ISO 13565-2 (de 0 % a 100 %); losangos: Smr1 e Smr2. "
+                       "Inclinação = −Sk/100 % [mm/%].")
             st.dataframe(rk)
         else:
             st.info("Sem curvas de Abbott neste resultado.")
@@ -488,24 +533,65 @@ def view_compare():
     if len(spec):
         s = spec.merge(sub[["arquivo", "_grupo"]], on="arquivo")
         g = s.groupby(["_grupo", "lambda_centro_mm"])["L_tx_dB_media"].mean().reset_index()
-        fig = px.line(g, x="lambda_centro_mm", y="L_tx_dB_media", color="_grupo", markers=True, log_x=True,
+        fig = px.line(g, x="lambda_centro_mm", y="L_tx_dB_media", color="_grupo", markers=True,
+                      category_orders={"_grupo": chosen}, color_discrete_sequence=COLORS,
                       labels={"lambda_centro_mm": "λ [mm]", "L_tx_dB_media": "L_tx [dB ref. 1 µm]", "_grupo": gname})
-        lam = sorted(g["lambda_centro_mm"].unique())
-        fig.update_xaxes(autorange="reversed", tickvals=lam, ticktext=[f"{x:g}" for x in lam])
+        spectrum_axis(fig, g["lambda_centro_mm"])
         fig.update_layout(height=450)
         st.plotly_chart(fig, key="cmp_spec")
+        wide = s.pivot_table(index=["_grupo", "arquivo"], columns="lambda_centro_mm", values="L_tx_dB_media")
+        wide = wide[sorted(wide.columns)]
+        wide.columns = [f"{c:g} mm" for c in wide.columns]
+        means = wide.groupby(level=0).mean().reindex([c for c in chosen if c in wide.index.get_level_values(0)])
+        st.markdown("**L_tx [dB ref. 1 µm] por banda – média por grupo**")
+        st.dataframe(means.round(2).rename_axis(gname))
+        with st.expander(f"Todas as amostras ({len(wide)})", expanded=True):
+            st.dataframe(wide.round(2).reset_index().rename(columns={"_grupo": gname}), hide_index=True)
+        st.download_button("⬇️ Espectros (CSV)", wide.reset_index().rename(columns={"_grupo": gname})
+                           .to_csv(index=False).encode("utf-8"), file_name=f"{proj.name}_espectros.csv",
+                           mime="text/csv", key="dl_spec")
 
     st.markdown("### Curvas de Abbott-Firestone")
     ch = st.radio("Cadeia areal", list(AREAL_CHAINS), format_func=AREAL_CHAINS.get, horizontal=True, index=1,
                   key="cmp_abbott_chain")
     ab = all_abbott(proj, st.session_state["proj_token"], ch)
     if len(ab):
+        c1, c2 = st.columns(2)
+        show_rk = c1.checkbox("Mostrar reta equivalente e Smr1/Smr2 (ISO 13565-2)", value=True, key="cmp_rk")
+        zoom = c2.checkbox("Zoom no núcleo (eixo de alturas entre 1 % e 99 %)", value=True, key="cmp_zoom")
         a = ab.merge(sub[["arquivo", "_grupo"]], on="arquivo")
         g = a.groupby(["_grupo", "mr_pct"])["altura_mm"].mean().reset_index()
-        fig = px.line(g, x="mr_pct", y="altura_mm", color="_grupo",
-                      labels={"mr_pct": "Material ratio [%]", "altura_mm": "altura [mm]", "_grupo": gname})
-        fig.update_layout(height=450)
+        tbl = rk_table(sub, ch)
+        tbl.insert(0, "arquivo", sub["arquivo"])
+        tbl.insert(0, gname, sub["_grupo"])
+        gmean = tbl.drop(columns="arquivo").groupby(gname).mean()
+        fig = go.Figure()
+        for i, grp in enumerate(chosen):
+            d = g[g["_grupo"] == grp]
+            if d.empty:
+                continue
+            col = COLORS[i % len(COLORS)]
+            fig.add_scatter(x=d["mr_pct"], y=d["altura_mm"], name=grp, line=dict(color=col), legendgroup=grp)
+            if show_rk and grp in gmean.index:
+                rk_overlay(fig, d["mr_pct"].to_numpy(), d["altura_mm"].to_numpy(), gmean.loc[grp], col, grp,
+                           labels=False)
+        if zoom:
+            core = g[(g["mr_pct"] >= 1) & (g["mr_pct"] <= 99)]["altura_mm"]
+            pad = 0.05 * float(core.max() - core.min())
+            fig.update_yaxes(range=[float(core.min()) - pad, float(core.max()) + pad])
+        fig.update_layout(height=500, xaxis_title="Material ratio [%]", yaxis_title="altura [mm]",
+                          legend_title_text=gname)
         st.plotly_chart(fig, key="cmp_abbott")
+        st.caption("Curva = média das curvas do grupo; tracejado = reta equivalente; losangos = Smr1 e Smr2 "
+                   "(passe o mouse para ver os valores). Smr1, Smr2 e Sk são médias do grupo, calculados por arquivo "
+                   "no servidor. Inclinação da reta equivalente = −Sk/100 % [mm/%].")
+        fmt_cols = {c: st.column_config.NumberColumn(c, format="%.4g") for c in tbl.columns[2:]}
+        st.markdown("**Família Sk – média por grupo**")
+        st.dataframe(gmean.reindex([c for c in chosen if c in gmean.index]), column_config=fmt_cols)
+        with st.expander(f"Todas as amostras ({len(tbl)})", expanded=True):
+            st.dataframe(tbl, hide_index=True, column_config=fmt_cols)
+        st.download_button("⬇️ Família Sk (CSV)", tbl.to_csv(index=False).encode("utf-8"),
+                           file_name=f"{proj.name}_abbott_{ch}.csv", mime="text/csv", key="dl_abbott")
     else:
         st.info("Sem curvas de Abbott no projeto (resultados do núcleo antigo).")
 
