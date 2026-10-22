@@ -29,7 +29,7 @@ sys.path.insert(0, str(ROOT))
 from components.i18n import LANGUAGES, DEFAULT_LANGUAGE, set_language, t  # noqa: E402
 from components.project_reader import Project, ProjectError  # noqa: E402
 
-APP_VERSION = "3.2.1"
+APP_VERSION = "3.2.2"
 APP_AUTHOR = "Sergio Callai"
 APP_YEAR = "2026"
 SHOW_PCA = False        # PCA desativada por enquanto na vista Estatística; True para reativar

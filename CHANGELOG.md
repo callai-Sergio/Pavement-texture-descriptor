@@ -1,5 +1,10 @@
 # TextureLab Changelog
 
+## [3.2.2] - 2026-10-22
+
+### Changed
+- PC scripts no longer assume drive `H:` (a university network drive): projects go to a `projetos` folder next to the app folder; install guide uses `%USERPROFILE%\TextureLab` on the local disk.
+
 ## [3.2.1] - 2026-10-22
 
 ### Added

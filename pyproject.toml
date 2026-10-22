@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "texturelab-engine"
-version = "3.2.1"
+version = "3.2.2"
 description = "Core engine for pavement texture evaluation"
 authors = [{name = "TextureLab"}]
 dependencies = [

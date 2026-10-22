@@ -47,7 +47,7 @@ São ~1,9 GB de pico e ~2 min por arquivo com o servidor livre. Com o servidor c
 ### No PC (sem depender do servidor)
 
 Ver [docs/PC_LOCAL.md](../docs/PC_LOCAL.md): `tools\baixar_resultados.bat` copia os projetos prontos
-para `H:\TextureLab\projetos`, e `tools\abrir_app.bat` abre o app localmente (sem túnel nem servidor).
+para `C:\Users\<você>\TextureLab\projetos` (disco local), e `tools\abrir_app.bat` abre o app localmente (sem túnel nem servidor).
 
 ## Opções
 
