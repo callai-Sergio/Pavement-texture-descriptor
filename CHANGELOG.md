@@ -1,5 +1,14 @@
 # TextureLab Changelog
 
+## [3.2.1] - 2026-10-22
+
+### Added
+- **Local viewing without the server**: `tools/baixar_resultados.ps1` (+ `.bat`) copies finished `.tlproj` packages from the server to the PC (`H:\TextureLab\projetos` by default), downloading only new or changed ones; `tools/abrir_app.ps1` (+ `.bat`) creates the viewer venv on first run and opens the app on `localhost:8502`. Guide in `docs/PC_LOCAL.md`.
+- Viewer: "Projects on this PC" list (folder from `TEXTURELAB_PROJETOS`), newest first, opens `.tlproj` directly.
+
+### Unchanged
+- Calculation core stays 3.2.0, so existing results keep their recipe and are not recomputed.
+
 ## [3.2.0] - 2026-10-06
 
 ### Added
