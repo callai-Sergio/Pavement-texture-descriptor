@@ -11,7 +11,9 @@ Copyright (c) 2025 Sergio Callai
 Licensed under CC BY-NC 4.0
 """
 import io
+import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -27,7 +29,7 @@ sys.path.insert(0, str(ROOT))
 from components.i18n import LANGUAGES, DEFAULT_LANGUAGE, set_language, t  # noqa: E402
 from components.project_reader import Project, ProjectError  # noqa: E402
 
-APP_VERSION = "3.2.0"
+APP_VERSION = "3.2.1"
 APP_AUTHOR = "Sergio Callai"
 APP_YEAR = "2026"
 SHOW_PCA = False        # PCA desativada por enquanto na vista Estatística; True para reativar
@@ -244,6 +246,17 @@ def _proj() -> Project | None:
     return st.session_state.get("projeto")
 
 
+def local_projects(folder: str) -> list[Path]:
+    """Projetos na pasta local (TEXTURELAB_PROJETOS): pacotes .tlproj e pastas com projeto.json,
+    do mais recente para o mais antigo. Preenchida por tools/baixar_resultados.ps1."""
+    root = Path(folder).expanduser()
+    if not root.is_dir():
+        return []
+    items = [p for p in root.iterdir()
+             if (p.is_file() and p.suffix.lower() == ".tlproj") or (p.is_dir() and (p / "projeto.json").is_file())]
+    return sorted(items, key=lambda p: p.stat().st_mtime, reverse=True)
+
+
 def _open(source, name=None):
     try:
         st.session_state["projeto"] = Project(source, name=name)
@@ -305,6 +318,18 @@ with st.sidebar:
         st.query_params["lang"] = lang
         st.rerun()
     st.markdown(f"### {t('open_project')}")
+    local_dir = os.environ.get("TEXTURELAB_PROJETOS", "")
+    if local_dir:
+        found = local_projects(local_dir)
+        if found:
+            pick = st.selectbox(t("local_projects"), found, key="local_pick", help=local_dir,
+                                format_func=lambda p: f"{p.name}  ·  "
+                                f"{datetime.fromtimestamp(p.stat().st_mtime):%Y-%m-%d %H:%M}")
+            if st.button(t("open_local_btn"), type="primary", width="stretch"):
+                _open(str(pick))
+        else:
+            st.caption(t("no_local_projects", path=local_dir))
+        st.markdown("---")
     path = st.text_input(t("path_label"), key="proj_path", placeholder=t("path_placeholder"), help=t("path_help"))
     if st.button(t("open_btn"), type="primary", width="stretch") and path.strip():
         _open(path.strip().strip('"'))

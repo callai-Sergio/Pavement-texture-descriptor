@@ -44,15 +44,10 @@ Limites padrão (topo do script ou variável de ambiente, ex.: `CPU_NUCLEOS=8 ./
 
 São ~1,9 GB de pico e ~2 min por arquivo com o servidor livre. Com o servidor carregado demora mais.
 
-### No PC
+### No PC (sem depender do servidor)
 
-```bash
-python -m venv .venv
-.venv\Scripts\activate                        # Linux/macOS: source .venv/bin/activate
-pip install -r TextureLab/requirements-viewer.txt
-scp sergio@137.226.169.235:/data/callai/workspace/tyron/Resultados_v3.tlproj .
-streamlit run TextureLab/app.py                # abra o Resultados_v3.tlproj na barra lateral
-```
+Ver [docs/PC_LOCAL.md](../docs/PC_LOCAL.md): `tools\baixar_resultados.bat` copia os projetos prontos
+para `H:\TextureLab\projetos`, e `tools\abrir_app.bat` abre o app localmente (sem túnel nem servidor).
 
 ## Opções
 

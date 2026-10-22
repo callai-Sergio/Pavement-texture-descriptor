@@ -44,6 +44,11 @@ STRINGS: dict[str, dict[str, str]] = {
                         "Ältere Ordner (Resultados_v2) lassen sich auch öffnen, mit weniger Diagrammen.",
                   "pt": "Pasta de saída do pipeline (com projeto.json) ou o pacote .tlproj. "
                         "Também abre pastas antigas (Resultados_v2), com menos gráficos."},
+    "local_projects": {"en": "Projects on this PC", "de": "Projekte auf diesem PC", "pt": "Projetos neste PC"},
+    "open_local_btn": {"en": "Open selected project", "de": "Ausgewähltes Projekt öffnen", "pt": "Abrir projeto selecionado"},
+    "no_local_projects": {"en": "No projects in {path} yet. Run tools\\baixar_resultados.bat to copy them from the server.",
+                          "de": "Noch keine Projekte in {path}. tools\\baixar_resultados.bat holt sie vom Server.",
+                          "pt": "Ainda não há projetos em {path}. Rode tools\\baixar_resultados.bat para copiá-los do servidor."},
     "open_btn": {"en": "Open folder / file", "de": "Ordner / Datei öffnen", "pt": "Abrir pasta / arquivo"},
     "upload_label": {"en": "…or upload a .tlproj", "de": "…oder .tlproj hochladen", "pt": "…ou envie um .tlproj"},
     "open_upload_btn": {"en": "Open uploaded package", "de": "Hochgeladenes Paket öffnen",

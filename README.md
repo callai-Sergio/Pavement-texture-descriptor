@@ -22,6 +22,8 @@ pip install -r TextureLab/requirements-viewer.txt
 streamlit run TextureLab/app.py        # then open Resultados_v3.2.tlproj or the folder
 ```
 
+- **View on the PC without the server:** `tools\baixar_resultados.bat` copies finished projects to
+  `H:\TextureLab\projetos`, `tools\abrir_app.bat` opens the app locally — see [docs/PC_LOCAL.md](docs/PC_LOCAL.md)
 - Batch usage, shared-server memory lock and options: [pipeline/README.md](pipeline/README.md)
 - Project format and recipe (code version + config + LAZ id): [docs/FORMATO_PROJETO.md](docs/FORMATO_PROJETO.md)
 - White paper: [Português](docs/WHITE_PAPER_PT.md) · [English](docs/WHITE_PAPER_EN.md) ·
