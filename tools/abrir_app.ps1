@@ -5,7 +5,7 @@
 #
 # Uso: clique duas vezes em tools\abrir_app.bat   ou   .\tools\abrir_app.ps1 [-Projetos "D:\pasta"] [-Porta 8502]
 param(
-    [string]$Projetos = "H:\TextureLab\projetos",
+    [string]$Projetos = (Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) "projetos"),
     [int]$Porta = 8502            # 8502 para não colidir com o túnel do servidor (8501)
 )
 $ErrorActionPreference = "Stop"

@@ -5,11 +5,13 @@
 #
 # Uso (PowerShell, na pasta do app):   .\tools\baixar_resultados.ps1
 #   ou clique duas vezes em tools\baixar_resultados.bat
+# Destino padrão: pasta "projetos" ao lado da pasta do app (ex.: app em C:\Users\voce\TextureLab\app ->
+# projetos em C:\Users\voce\TextureLab\projetos), no disco local, para funcionar sem rede.
 # Opções: -Destino "D:\outra\pasta"  -Servidor "usuario@host"  -PastaRemota "/caminho/no/servidor"
 param(
     [string]$Servidor = "sergio@137.226.169.235",
     [string]$PastaRemota = "/data/callai/workspace/tyron",
-    [string]$Destino = "H:\TextureLab\projetos"
+    [string]$Destino = (Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) "projetos")
 )
 $ErrorActionPreference = "Stop"
 

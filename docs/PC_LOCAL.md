@@ -3,6 +3,10 @@
 O servidor calcula (`pipeline/servidor.sh`) e grava um pacote `.tlproj` por lote. O PC copia esses
 pacotes para uma pasta local, e o app abre a partir dali, sem túnel nem servidor, inclusive offline.
 
+Instale no **disco local** (`C:\Users\<você>\TextureLab`), não num drive de rede como o `H:` da
+universidade: o drive de rede também depende de conexão. Os projetos ficam em `TextureLab\projetos`,
+ao lado da pasta do app.
+
 ## Instalação (uma vez)
 
 No **PowerShell do PC**:
@@ -13,11 +17,11 @@ $zip = "$env:TEMP\texturelab.zip"; $src = "$env:TEMP\texturelab_src"
 Invoke-WebRequest https://github.com/callai-Sergio/Pavement-texture-descriptor/archive/refs/heads/master.zip -OutFile $zip
 Remove-Item $src -Recurse -Force -ErrorAction SilentlyContinue
 Expand-Archive $zip -DestinationPath $src
-New-Item -ItemType Directory -Force H:\TextureLab\app | Out-Null
-Copy-Item "$src\Pavement-texture-descriptor-master\*" H:\TextureLab\app -Recurse -Force
+New-Item -ItemType Directory -Force $env:USERPROFILE\TextureLab\app | Out-Null
+Copy-Item "$src\Pavement-texture-descriptor-master\*" $env:USERPROFILE\TextureLab\app -Recurse -Force
 ```
 
-Com git: `git clone https://github.com/callai-Sergio/Pavement-texture-descriptor.git H:\TextureLab\app`.
+Com git: `git clone https://github.com/callai-Sergio/Pavement-texture-descriptor.git $env:USERPROFILE\TextureLab\app`.
 
 Precisa de **Python 3.10 ou mais novo**. Se não tiver: `winget install Python.Python.3.12`.
 
@@ -25,8 +29,8 @@ Precisa de **Python 3.10 ou mais novo**. Se não tiver: `winget install Python.P
 
 | Ação | Como |
 |---|---|
-| Copiar do servidor os projetos novos | clique duas vezes em `H:\TextureLab\app\tools\baixar_resultados.bat` |
-| Abrir o app (local) | clique duas vezes em `H:\TextureLab\app\tools\abrir_app.bat` → abre http://localhost:8502 |
+| Copiar do servidor os projetos novos | clique duas vezes em `C:\Users\<você>\TextureLab\app\tools\baixar_resultados.bat` |
+| Abrir o app (local) | clique duas vezes em `C:\Users\<você>\TextureLab\app\tools\abrir_app.bat` → abre http://localhost:8502 |
 
 - `baixar_resultados` só baixa os pacotes **novos ou alterados** (compara tamanho e data). Precisa de
   rede/VPN até o servidor só nesse momento. Um lote ainda em andamento não aparece até terminar.
@@ -36,5 +40,5 @@ Precisa de **Python 3.10 ou mais novo**. Se não tiver: `winget install Python.P
 
 Outra pasta: `baixar_resultados.bat -Destino D:\Dados\TextureLab` e `abrir_app.bat -Projetos D:\Dados\TextureLab`.
 
-Atualizar o app: repita o bloco de instalação (ou `git pull` em `H:\TextureLab\app`).
+Atualizar o app: repita o bloco de instalação (ou `git pull` em `$env:USERPROFILE\TextureLab\app`).
 O ambiente Python é reaproveitado e só reinstala bibliotecas se `requirements-viewer.txt` mudar.
