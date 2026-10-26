@@ -242,4 +242,14 @@ def test_height_percentiles_and_g3d():
     curve = tb.material_ratio_curve(h, 10001)
     o = tb.height_percentiles(h, curve)
     assert o["P50"] == pytest.approx(1.0) and o["P95"] == pytest.approx(1.0)   # média = −1 -> topo = +1
-    assert o["g3D_pct"] == pytest.approx(90.0, abs=0.5)                # z_mid = −5 cruza em Mr ≈ 90 %
+    assert o["P90_P70"] == pytest.approx(1.0)
+
+
+def test_g_factor_3d_patches():
+    """Plano com poços estreitos (10 % da área): cada trecho de 100 mm tem z_mid no meio da profundidade
+    e g ≈ 90 %; dois trechos de 100 mm numa faixa de 200 × 20 mm em células de 0,5 mm."""
+    dx = 0.5
+    S = np.zeros((40, 400))
+    S[::10, :] = -2.0                                                  # 4 de 40 linhas = 10 % fundos
+    o = tb.g_factor_3d(S, dx, tb.load_config(None))
+    assert o["g3D_n_trechos"] == 2 and o["g3D_pct"] == pytest.approx(90.0, abs=0.5)

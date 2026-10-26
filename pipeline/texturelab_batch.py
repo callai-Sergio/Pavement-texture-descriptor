@@ -45,9 +45,11 @@ Cadeias implementadas (todas sobre a grade em mm, eixo maior = sentido da via):
   R  PSD radial e Hurst 3D ... descritivo, sem norma: PSD 2D da superfície SF por blocos quadrados (Hann,
                                50 % de sobreposição), média radial em bins log; Hurst 3D pela inclinação
                                PSD_2D ∝ q^-(2+2H), faixas micro e macro como no Hurst 1D.
-  P  Percentis e g 3D ........ P50/P70/P90/P95 das alturas (rel. à média) e g-factor 3D (D_cum onde
-                               z_mid = (z_max+z_min)/2 cruza a curva de Abbott da superfície; análogo
-                               3D do Anexo B da DIN ISO 10844, sem norma) para SF, SL5 e MICRO.
+  P  Percentis e g 3D ........ P50/P70/P90/P95 das alturas (rel. à média) para SF, SL5 e MICRO.
+                               g-factor 3D (SF e SL5; análogo do Anexo B da DIN ISO 10844, sem norma):
+                               superfície em células de 0,5 mm (média, como a reamostragem da ISO 13473-1),
+                               trechos de 100 mm na largura toda, Anexo B em cada trecho, média dos trechos.
+                               Fica acima do g de perfil (cada trecho tem ~85× mais pontos, z_min mais fundo).
   W  Ondaletas ............... descritivo, sem norma: DWT ortonormal (Daubechies db4, periodização).
                                Perfil: linhas nativas (uma por faixa de 0,5 mm), energia por oitava
                                λ ∈ [2^j·dx, 2^(j+1)·dx], em µm rms e dB re 1 µm; parcelas micro/macro.
@@ -847,15 +849,34 @@ def _view_curves(h: np.ndarray, curve, prefix: str, cfg: dict, extras: dict) -> 
 
 def height_percentiles(h: np.ndarray, curve) -> dict:
     """P50/P70/P90/P95 das alturas em relação à média (Pp = p-ésimo percentil = curva de Abbott em
-    Mr = 100 − p), razão P90/P70 e g-factor 3D: D_cum (= Mr) onde z_mid = (z_max + z_min)/2 cruza a curva
-    de Abbott da superfície. Análogo 3D do Anexo B da DIN ISO 10844 (que é de perfil), sem norma."""
+    Mr = 100 − p) e razão P90/P70 (cauda superior da PDF)."""
     mr, c = curve
     mean = float(np.mean(h, dtype=np.float64))
     out = {f"P{p}": float(np.interp(100.0 - p, mr, c) - mean) for p in (50, 70, 90, 95)}
     out["P90_P70"] = out["P90"] / out["P70"] if out["P70"] > 0 else None
-    z_mid = (c[0] + c[-1]) / 2.0
-    out["g3D_pct"] = float(np.interp(-z_mid, -c, mr))
     return out
+
+
+def g_factor_3d(S: np.ndarray, dx: float, cfg: dict) -> dict:
+    """g-factor 3D, análogo (sem norma) do Anexo B da DIN ISO 10844 na mesma escala do perfil: média em
+    células de A_resample_mm (0,5 mm), trechos de A_segment_mm (100 mm) ao longo da via com a largura
+    toda, g_factor() em cada trecho, média e desvio dos trechos. Sobre z_max/z_min da superfície inteira na
+    resolução nativa o z_mid cairia num único ponto extremo (g ≈ 100 %)."""
+    k = max(1, int(round(cfg["A_resample_mm"] / dx)))
+    ny, nx = (S.shape[0] // k) * k, (S.shape[1] // k) * k
+    R = max(1, BLOCK_CELLS // (k * S.shape[1]))
+    rows = []
+    for j in range(0, ny // k, R):
+        r = min(R, ny // k - j)
+        rows.append(S[j * k:(j + r) * k, :nx].reshape(r, k, nx // k, k).mean(axis=(1, 3)))
+    B = np.concatenate(rows, axis=0)
+    seg = int(round(cfg["A_segment_mm"] / (k * dx)))
+    gs = [g_factor(B[:, a:a + seg].ravel())[0] for a in range(0, B.shape[1] - seg + 1, seg)]
+    gs = [g for g in gs if np.isfinite(g)]
+    if not gs:
+        return {}
+    return {"g3D_pct": float(np.mean(gs)), "g3D_desvio": float(np.std(gs, ddof=1)) if len(gs) > 1 else 0.0,
+            "g3D_n_trechos": len(gs)}
 
 
 def radial_psd(S: np.ndarray, dx: float, cfg: dict) -> tuple[dict, pd.DataFrame]:
@@ -956,6 +977,7 @@ def chain_areal(zbox: list, dx: float, cfg: dict, extras: dict | None = None,
     del Ss
     m = int(np.ceil(cfg["S_L_macro_mm"] / dx))                       # margem = L (efeito de borda)
     out = areal_params(SF[m:-m, m:-m], dx, "SF", cfg, extras=extras)
+    out.update({f"SF_{k}": v for k, v in g_factor_3d(SF[m:-m, m:-m], dx, cfg).items()})
     rp, df_rp = radial_psd(SF[m:-m, m:-m], dx, cfg)                     # PSD radial 3D na SF
     out.update(rp)
     if tables is not None:
@@ -966,6 +988,7 @@ def chain_areal(zbox: list, dx: float, cfg: dict, extras: dict | None = None,
     np.subtract(SF, SL, out=SL)                                        # SL = SF - gauss(SF)
     del SF
     out.update(areal_params(SL[m:-m, m:-m], dx, "SL5", cfg, extras=extras))
+    out.update({f"SL5_{k}": v for k, v in g_factor_3d(SL[m:-m, m:-m], dx, cfg).items()})
     w2, df_w2 = wavelet_2d(SL[m:-m, m:-m], dx, cfg)                     # ondaletas 2D na SL5
     out.update(w2)
     if tables is not None:
