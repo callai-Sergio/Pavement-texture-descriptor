@@ -28,29 +28,42 @@ AREAL = [("Ssk", "-", "Skewness (ISO 25178-2)"), ("Sku", "-", "Kurtosis (ISO 251
          ("P50", "mm", "Percentil 50 das alturas (rel. à média)"), ("P70", "mm", "Percentil 70 das alturas"),
          ("P90", "mm", "Percentil 90 das alturas"), ("P95", "mm", "Percentil 95 das alturas"),
          ("P90_P70", "-", "Razão P90/P70 (cauda superior da PDF)"),
-         ("g3D_pct", "%", "g-factor 3D: análogo do Anexo B da DIN ISO 10844 na curva de Abbott da superfície (sem norma)")]
-PROFILE = [("MPD", "mm", "Mean Profile Depth (ISO 13473-1)"),
-           ("g_factor_media", "%", "g-factor (DIN ISO 10844:2024 Anexo B), média dos segmentos de 100 mm"),
-           ("perfil_Rsk_media", "-", "Skewness de perfil (ISO 13473-2 / DIN ISO 10844 5.3.2)"),
-           ("perfil_Rku_media", "-", "Kurtosis de perfil"),
-           ("perfil_Rk_media", "mm", "Rk (ISO 13565-2)"), ("perfil_Rpk_media", "mm", "Rpk (ISO 13565-2)"),
-           ("perfil_Rvk_media", "mm", "Rvk (ISO 13565-2)"), ("perfil_Rmr1_media", "%", "Mr1 (ISO 13565-2)"),
-           ("perfil_Rmr2_media", "%", "Mr2 (ISO 13565-2)")]
-HURST = [("H_micro", "-", "Hurst 1D (perfil), 0,05–0,5 mm", "perfil"), ("H_macro", "-", "Hurst 1D (perfil), 0,5–20 mm", "perfil"),
-         ("H2D_micro", "-", "Hurst 3D pela PSD radial (SF), 0,05–0,5 mm", "3D"),
-         ("H2D_macro", "-", "Hurst 3D pela PSD radial (SF), 0,5–20 mm", "3D")]
+         ("g3D_pct", "%", "g-factor 3D (sem norma): Anexo B da DIN ISO 10844 em trechos de 100 mm × largura toda, "
+                          "células de 0,5 mm; média dos trechos. Só SL5 (na MICRO a reamostragem apagaria a microtextura)")]
+# (coluna no resumo, nome curto, unidade, descrição)
+PROFILE = [("MPD", "MPD", "mm", "Mean Profile Depth (ISO 13473-1)"),
+           ("g_factor_media", "g", "%", "g-factor (DIN ISO 10844:2024 Anexo B), média dos segmentos de 100 mm"),
+           ("perfil_Rsk_media", "Rsk", "-", "Skewness de perfil (ISO 13473-2 / DIN ISO 10844 5.3.2)"),
+           ("perfil_Rku_media", "Rku", "-", "Kurtosis de perfil"),
+           ("perfil_Rk_media", "Rk", "mm", "Rk (ISO 13565-2)"), ("perfil_Rpk_media", "Rpk", "mm", "Rpk (ISO 13565-2)"),
+           ("perfil_Rvk_media", "Rvk", "mm", "Rvk (ISO 13565-2)"), ("perfil_Rmr1_media", "Mr1", "%", "Mr1 (ISO 13565-2)"),
+           ("perfil_Rmr2_media", "Mr2", "%", "Mr2 (ISO 13565-2)")]
+HURST = [("H_micro", "H micro", "-", "Hurst 1D (PSD de perfil), 0,05–0,5 mm", "perfil"),
+         ("H_macro", "H macro", "-", "Hurst 1D (PSD de perfil), 0,5–20 mm", "perfil"),
+         ("H2D_micro", "H micro", "-", "Hurst 3D (PSD radial da superfície SF), 0,05–0,5 mm", "3D"),
+         ("H2D_macro", "H macro", "-", "Hurst 3D (PSD radial da superfície SF), 0,5–20 mm", "3D")]
+LAMBDA_GRID = np.logspace(np.log10(0.025), np.log10(80.0), 61)          # λ comum para as PSD (mm)
 
 
 def surface_key(df: pd.DataFrame) -> pd.Series:
     return df["trecho"].astype(str) + " · " + df["revestimento"].astype(str)
 
 
-def vector_median(proj: Project, files: pd.DataFrame, filename: str, xcol: str, ycol: str) -> pd.DataFrame:
-    """Vetor (ex.: L_tx por banda) de cada arquivo -> mediana por superfície, uma coluna por x."""
+def vector_median(proj: Project, files: pd.DataFrame, filename: str, xcol: str, ycol: str,
+                  grid=None) -> pd.DataFrame:
+    """Vetor (ex.: L_tx por banda) de cada arquivo -> mediana por superfície, uma coluna por x. Com 'grid',
+    cada vetor é antes interpolado em log-log nesse eixo (PSD: grade comum de λ, fora da faixa = vazio)."""
     parts = []
     for _, r in files.iterrows():
         tb = proj.table(r["arquivo"], filename)
-        if tb is not None and len(tb):
+        if tb is None or not len(tb):
+            continue
+        if grid is not None:
+            tb = tb[(tb[xcol] > 0) & (tb[ycol] > 0)].sort_values(xcol)
+            lx, ly = np.log10(tb[xcol].to_numpy()), np.log10(tb[ycol].to_numpy())
+            y = 10 ** np.interp(np.log10(grid), lx, ly, left=np.nan, right=np.nan)
+            parts.append(pd.DataFrame({"superficie": r["superficie"], "x": np.round(grid, 4), "y": y}))
+        else:
             parts.append(pd.DataFrame({"superficie": r["superficie"], "x": tb[xcol].round(6), "y": tb[ycol]}))
     if not parts:
         return pd.DataFrame()
@@ -89,13 +102,18 @@ def main():
     s["superficie"] = surface_key(s)
 
     cols, legend = [], []
-    for k, u, d in PROFILE:
-        cols.append((f"perfil | {k}", k)); legend.append(("perfil (norma)", k, u, d))
+    for k, short, u, d in PROFILE:
+        name = f"perfil | {short} [{u}]"
+        cols.append((name, k)); legend.append((name, "perfil (norma)", k, d))
     for ch in CHAINS:
         for k, u, d in AREAL:
-            cols.append((f"{ch} | {k}", f"{ch}_{k}")); legend.append((f"3D {ch}", f"{ch}_{k}", u, d))
-    for k, u, d, kind in HURST:
-        cols.append((f"{kind} | {k}", k)); legend.append((kind, k, u, d))
+            if ch == "MICRO" and k == "g3D_pct":
+                continue
+            name = f"{ch} | {k.replace('_pct', '').replace('P90_P70', 'P90/P70')} [{u}]"
+            cols.append((name, f"{ch}_{k}")); legend.append((name, f"3D {ch}", f"{ch}_{k}", d))
+    for k, short, u, d, kind in HURST:
+        name = f"{kind} | {short} [{u}]"
+        cols.append((name, k)); legend.append((name, kind, k, d))
     present = [(name, c) for name, c in cols if c in s]
     data = s[["superficie", "arquivo"] + [c for _, c in present]].rename(columns={c: name for name, c in present})
     num = [name for name, _ in present]
@@ -104,10 +122,11 @@ def main():
 
     files = s[["arquivo", "superficie"]]
     ltx = vector_median(proj, files, "espectro_terco_oitava.csv", "lambda_centro_mm", "L_tx_dB_media")
-    psd1 = vector_median(proj, files, "psd_media.csv", "lambda_mm", "PSD_mm3")
-    psd2 = vector_median(proj, files, "psd_radial.csv", "lambda_mm", "PSD2D_mm4")
+    psd1 = vector_median(proj, files, "psd_media.csv", "lambda_mm", "PSD_mm3", grid=LAMBDA_GRID)
+    psd2 = vector_median(proj, files, "psd_radial.csv", "lambda_mm", "PSD2D_mm4", grid=LAMBDA_GRID)
+    psd1, psd2 = (d.dropna(axis=1, how="all") for d in (psd1, psd2))
 
-    leia = pd.DataFrame(legend, columns=["tipo", "parâmetro", "unidade", "descrição"])
+    leia = pd.DataFrame(legend, columns=["coluna", "tipo", "campo no resumo.json", "descrição"])
     notas = pd.DataFrame({"nota": [
         f"Projeto: {proj.name} · núcleo {', '.join(proj.meta.get('versoes_nos_resultados', []))} · {len(s)} arquivos.",
         "Uma linha por superfície = trecho + revestimento (as 4 pistas ISO são superfícies distintas); valor = mediana dos MPs.",
@@ -115,7 +134,10 @@ def main():
         "Parâmetros 'perfil' são definidos por norma só para perfis (ISO 13473-1/-2, ISO 13565-2, DIN ISO 10844); mantidos como referência normativa.",
         "Percentis P50–P95: alturas em relação à média da superfície; P90/P70 descreve a cauda superior da PDF.",
         "L_tx por terço de oitava (ISO 13473-4) é vetorial e de perfil: aba 'Ltx_terco_oitava' (dB re 1 µm, colunas = λ central em mm).",
-        "PSD 1D: perfil no sentido da via (mm³). PSD radial: superfície SF em 2D, média radial (mm⁴). Colunas = λ em mm.",
+        "PSD 1D: perfil no sentido da via (mm³). PSD radial: superfície SF em 2D, média radial (mm⁴). Colunas = λ em mm "
+        "(60 valores log-espaçados; cada arquivo interpolado em log-log antes da mediana).",
+        "g-factor 3D fica acima do g de perfil: cada trecho de 100 mm × largura tem ~85× mais pontos que um perfil, "
+        "então z_min é mais fundo e z_mid desce; use o g de perfil como valor normativo.",
         "PDF: densidade (1/mm) das alturas, reamostrada numa grade comum; colunas = altura em mm.",
     ]})
     with pd.ExcelWriter(out) as xw:
