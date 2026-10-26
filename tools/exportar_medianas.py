@@ -18,7 +18,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "TextureLab"))
 from components.project_reader import Project  # noqa: E402
 
-CHAINS = ["SL5", "MICRO"]
+CHAINS = ["SL5", "MICRO", "ML5"]   # ML5 = MICRO + SL5 numa superfície só (L 5 mm, sem S)
 AREAL = [("Ssk", "-", "Skewness (ISO 25178-2)"), ("Sku", "-", "Kurtosis (ISO 25178-2)"),
          ("Sk", "mm", "Altura do núcleo (ISO 25178-2 / 13565-2)"), ("Spk", "mm", "Altura reduzida dos picos"),
          ("Svk", "mm", "Profundidade reduzida dos vales"), ("Smr1", "%", "Material ratio superior do núcleo"),
@@ -107,7 +107,7 @@ def main():
         cols.append((name, k)); legend.append((name, "perfil (norma)", k, d))
     for ch in CHAINS:
         for k, u, d in AREAL:
-            if ch == "MICRO" and k == "g3D_pct":
+            if ch in ("MICRO", "ML5") and k == "g3D_pct":
                 continue
             name = f"{ch} | {k.replace('_pct', '').replace('P90_P70', 'P90/P70')} [{u}]"
             cols.append((name, f"{ch}_{k}")); legend.append((name, f"3D {ch}", f"{ch}_{k}", d))
@@ -130,7 +130,8 @@ def main():
     notas = pd.DataFrame({"nota": [
         f"Projeto: {proj.name} · núcleo {', '.join(proj.meta.get('versoes_nos_resultados', []))} · {len(s)} arquivos.",
         "Uma linha por superfície = trecho + revestimento (as 4 pistas ISO são superfícies distintas); valor = mediana dos MPs.",
-        "3D SL5: superfície S 0,05 mm + F plano + L 5 mm (textura dos agregados). 3D MICRO: F plano + L 0,5 mm (provisória).",
+        "3D SL5: superfície S 0,05 mm + F plano + L 5 mm (textura dos agregados). 3D MICRO: F plano + L 0,5 mm (provisória). "
+        "3D ML5: F plano + L 5 mm sem S = MICRO + SL5 calculadas numa superfície só (~0,01–5 mm).",
         "Parâmetros 'perfil' são definidos por norma só para perfis (ISO 13473-1/-2, ISO 13565-2, DIN ISO 10844); mantidos como referência normativa.",
         "Percentis P50–P95: alturas em relação à média da superfície; P90/P70 descreve a cauda superior da PDF.",
         "L_tx por terço de oitava (ISO 13473-4) é vetorial e de perfil: aba 'Ltx_terco_oitava' (dB re 1 µm, colunas = λ central em mm).",

@@ -69,14 +69,15 @@ def test_results_and_viewer_data(project):
     assert 0 < r["MPD"] < 5 and "ETD" not in r
     assert 0 < r["g_factor_media"] < 100 and r["g_factor_n_segmentos"] == r["A_n_segmentos_validos"]
     assert r["A_n_segmentos_validos"] > 0
-    assert "H_macro" in r and "SL5_Sq" in r and "MICRO_Sq" in r
+    assert "H_macro" in r and "SL5_Sq" in r and "MICRO_Sq" in r and "ML5_Sq" in r
+    assert r["ML5_Sq"] > r["MICRO_Sq"] and r["ML5_Sq"] > r["SL5_Sq"] * 0.9    # banda ML5 contém MICRO e ~SL5
     assert 0 <= r["W_fracao_micro"] <= 1 and -1 <= r["W2_anisotropia_macro"] <= 1
     for name in ("cadeiaA_segmentos.csv", "espectro_terco_oitava.csv", "psd_media.csv", "previa.npz",
                  "visualizacao.npz", "ondaletas_perfil.csv", "ondaletas_2d.csv"):
         assert (od / name).exists(), name
     with np.load(od / "visualizacao.npz", allow_pickle=False) as v:
         assert int(v["versao_formato"]) == tb.FORMAT_VERSION
-        for ch in ("SF", "SL5", "MICRO"):
+        for ch in ("SF", "SL5", "MICRO", "ML5"):
             mr, h = v[f"{ch}_abbott_mr_pct"], v[f"{ch}_abbott_altura_mm"]
             assert mr[0] == 0 and mr[-1] == 100 and np.all(np.diff(h) <= 1e-6)    # curva decrescente
             assert v[f"{ch}_hist_contagem"].sum() > 0
@@ -253,3 +254,15 @@ def test_g_factor_3d_patches():
     S[::10, :] = -2.0                                                  # 4 de 40 linhas = 10 % fundos
     o = tb.g_factor_3d(S, dx, tb.load_config(None))
     assert o["g3D_n_trechos"] == 2 and o["g3D_pct"] == pytest.approx(90.0, abs=0.5)
+
+
+def test_filters_match_standards():
+    """ISO 16610-61: gaussiano transmite 50 % em λc (S 0,05; L 0,5; L 5 mm). ISO 13473-1 Anexo D: passa-baixa
+    2,40 mm ida e volta transmite 50 % em 2,40 mm. ISO 13473-4: terço de oitava −3 dB nas bordas."""
+    sys.path.insert(0, str(HERE.parent.parent / "tools"))
+    import verificar_filtros as vf
+    for lc in (0.05, 0.5, 5.0):
+        assert vf.measure_gauss(lc, np.array([lc]))[0] == pytest.approx(0.5, abs=0.005)
+    assert vf.measure_chain_a_lp(np.array([2.4]))[0] == pytest.approx(0.5, abs=0.005)
+    g = vf.third_octave_response(5.0, 0.1, [5.0, 5.0 * 10 ** 0.05])
+    assert g[0] == pytest.approx(0.0, abs=0.05) and g[1] == pytest.approx(-3.01, abs=0.1)
