@@ -219,3 +219,37 @@ def test_pack_name_with_dot(tmp_path, project):
     other.write_bytes(b"antigo")
     dest = tb.pack_project(dotted)
     assert dest.name == "Resultados_v3.2.tlproj" and other.read_bytes() == b"antigo"
+
+
+def test_radial_psd_recovers_hurst():
+    """Superfície auto-afim isotrópica com H = 0,6 (|F| ∝ q^-(1+H)) -> H2D_macro ≈ 0,6; variância ≈ soma(PSD)."""
+    rng = np.random.default_rng(1)
+    dx, ny, nx, H = 0.05, 1024, 4096, 0.6
+    fy = np.fft.fftfreq(ny, dx)[:, None]
+    fx = np.fft.rfftfreq(nx, dx)[None, :]
+    q = np.hypot(fx, fy)
+    q[0, 0] = 1.0
+    F = (rng.normal(size=q.shape) + 1j * rng.normal(size=q.shape)) * q ** -(1 + H)
+    F[0, 0] = 0
+    z = np.fft.irfft2(F, s=(ny, nx))
+    cfg = dict(tb.load_config(None), R_tile=1024)
+    out, df = tb.radial_psd(z, dx, cfg)
+    assert out["H2D_macro"] == pytest.approx(H, abs=0.08) and out["H2D_macro_R2"] > 0.95
+
+
+def test_height_percentiles_and_g3d():
+    h = np.r_[np.zeros(900), np.full(100, -10.0)]                      # plano com 10 % de vales fundos
+    curve = tb.material_ratio_curve(h, 10001)
+    o = tb.height_percentiles(h, curve)
+    assert o["P50"] == pytest.approx(1.0) and o["P95"] == pytest.approx(1.0)   # média = −1 -> topo = +1
+    assert o["P90_P70"] == pytest.approx(1.0)
+
+
+def test_g_factor_3d_patches():
+    """Plano com poços estreitos (10 % da área): cada trecho de 100 mm tem z_mid no meio da profundidade
+    e g ≈ 90 %; dois trechos de 100 mm numa faixa de 200 × 20 mm em células de 0,5 mm."""
+    dx = 0.5
+    S = np.zeros((40, 400))
+    S[::10, :] = -2.0                                                  # 4 de 40 linhas = 10 % fundos
+    o = tb.g_factor_3d(S, dx, tb.load_config(None))
+    assert o["g3D_n_trechos"] == 2 and o["g3D_pct"] == pytest.approx(90.0, abs=0.5)

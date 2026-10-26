@@ -42,6 +42,14 @@ Cadeias implementadas (todas sobre a grade em mm, eixo maior = sentido da via):
                                g = distribuição cumulativa (0 % no ponto mais alto) onde z_mid cruza a
                                curva de Abbott; média dos segmentos por ponto de medição (arquivo).
                                Assimetria = Rsk por segmento (ISO 13473-2), média = perfil_Rsk_media.
+  R  PSD radial e Hurst 3D ... descritivo, sem norma: PSD 2D da superfície SF por blocos quadrados (Hann,
+                               50 % de sobreposição), média radial em bins log; Hurst 3D pela inclinação
+                               PSD_2D ∝ q^-(2+2H), faixas micro e macro como no Hurst 1D.
+  P  Percentis e g 3D ........ P50/P70/P90/P95 das alturas (rel. à média) para SF, SL5 e MICRO.
+                               g-factor 3D (SF e SL5; análogo do Anexo B da DIN ISO 10844, sem norma):
+                               superfície em células de 0,5 mm (média, como a reamostragem da ISO 13473-1),
+                               trechos de 100 mm na largura toda, Anexo B em cada trecho, média dos trechos.
+                               Fica acima do g de perfil (cada trecho tem ~85× mais pontos, z_min mais fundo).
   W  Ondaletas ............... descritivo, sem norma: DWT ortonormal (Daubechies db4, periodização).
                                Perfil: linhas nativas (uma por faixa de 0,5 mm), energia por oitava
                                λ ∈ [2^j·dx, 2^(j+1)·dx], em µm rms e dB re 1 µm; parcelas micro/macro.
@@ -87,7 +95,7 @@ import numpy as np
 import pandas as pd
 from scipy import ndimage, signal
 
-VERSION = "3.2.0"
+VERSION = "3.3.0"
 FORMAT_VERSION = 1              # formato do projeto (projeto.json / visualizacao.npz)
 
 _trapz = getattr(np, "trapezoid", None) or np.trapz   # numpy < 2.0
@@ -116,6 +124,9 @@ CFG = {
     "H_nperseg_mm": 90.0,           # segmento de Welch (potência de 2 em amostras)
     "H_bands_mm": {"micro": (0.05, 0.5), "macro": (0.5, 20.0)},   # faixas de comprimento de onda
     "H_n_bins": 20,                 # bins log-espaçados no ajuste
+    # PSD radial 2D (descritivo, não normativo)
+    "R_tile": 2048,                 # lado do bloco quadrado (células); 2048·0,011 mm ≈ 22,5 mm
+    "R_n_bins": 60,                 # bins log-espaçados na média radial
     # ondaletas (descritivo, não normativo)
     "W_wavelet": "db4",             # Daubechies 4 (ortonormal: energia dos coeficientes = variância)
     "W_lambda_max_mm": 50.0,        # maior banda de perfil (limite superior da oitava)
@@ -836,6 +847,87 @@ def _view_curves(h: np.ndarray, curve, prefix: str, cfg: dict, extras: dict) -> 
                    f"{prefix}_hist_contagem": cnt.astype(np.int64)})
 
 
+def height_percentiles(h: np.ndarray, curve) -> dict:
+    """P50/P70/P90/P95 das alturas em relação à média (Pp = p-ésimo percentil = curva de Abbott em
+    Mr = 100 − p) e razão P90/P70 (cauda superior da PDF)."""
+    mr, c = curve
+    mean = float(np.mean(h, dtype=np.float64))
+    out = {f"P{p}": float(np.interp(100.0 - p, mr, c) - mean) for p in (50, 70, 90, 95)}
+    out["P90_P70"] = out["P90"] / out["P70"] if out["P70"] > 0 else None
+    return out
+
+
+def g_factor_3d(S: np.ndarray, dx: float, cfg: dict) -> dict:
+    """g-factor 3D, análogo (sem norma) do Anexo B da DIN ISO 10844 na mesma escala do perfil: média em
+    células de A_resample_mm (0,5 mm), trechos de A_segment_mm (100 mm) ao longo da via com a largura
+    toda, g_factor() em cada trecho, média e desvio dos trechos. Sobre z_max/z_min da superfície inteira na
+    resolução nativa o z_mid cairia num único ponto extremo (g ≈ 100 %)."""
+    k = max(1, int(round(cfg["A_resample_mm"] / dx)))
+    ny, nx = (S.shape[0] // k) * k, (S.shape[1] // k) * k
+    R = max(1, BLOCK_CELLS // (k * S.shape[1]))
+    rows = []
+    for j in range(0, ny // k, R):
+        r = min(R, ny // k - j)
+        rows.append(S[j * k:(j + r) * k, :nx].reshape(r, k, nx // k, k).mean(axis=(1, 3)))
+    B = np.concatenate(rows, axis=0)
+    seg = int(round(cfg["A_segment_mm"] / (k * dx)))
+    gs = [g_factor(B[:, a:a + seg].ravel())[0] for a in range(0, B.shape[1] - seg + 1, seg)]
+    gs = [g for g in gs if np.isfinite(g)]
+    if not gs:
+        return {}
+    return {"g3D_pct": float(np.mean(gs)), "g3D_desvio": float(np.std(gs, ddof=1)) if len(gs) > 1 else 0.0,
+            "g3D_n_trechos": len(gs)}
+
+
+def radial_psd(S: np.ndarray, dx: float, cfg: dict) -> tuple[dict, pd.DataFrame]:
+    """PSD 2D isotrópica (média radial) por blocos quadrados com janela de Hann 2D e 50 % de sobreposição.
+    Normalização: soma(PSD)·df² = variância (unidade mm⁴ = mm² de altura por (1/mm)²). Hurst 3D pela
+    inclinação em log-log: PSD_2D ∝ q^-(2+2H); D = 3 − H."""
+    t = int(min(cfg["R_tile"], 2 ** int(np.floor(np.log2(min(S.shape))))))
+    step = t // 2
+    w1 = np.hanning(t)
+    w2 = np.outer(w1, w1)
+    norm = dx * dx / (w2 ** 2).sum()
+    acc = np.zeros((t, t // 2 + 1))
+    n = 0
+    for a in range(0, S.shape[0] - t + 1, step):
+        for b in range(0, S.shape[1] - t + 1, step):
+            blk = S[a:a + t, b:b + t].astype(np.float64)
+            if not np.isfinite(blk).all():
+                continue
+            blk -= blk.mean()
+            acc += np.abs(np.fft.rfft2(blk * w2)) ** 2
+            n += 1
+    if n == 0:
+        return {"R_erro": "nenhum bloco válido"}, pd.DataFrame()
+    P = acc / n * norm
+    fy = np.fft.fftfreq(t, dx)[:, None]
+    fx = np.fft.rfftfreq(t, dx)[None, :]
+    q = np.hypot(fx, fy)
+    edges = np.logspace(np.log10(1.0 / (t * dx)), np.log10(0.5 / dx), cfg["R_n_bins"] + 1)
+    idx = np.digitize(q.ravel(), edges) - 1
+    ok = (idx >= 0) & (idx < len(edges) - 1)
+    cnt = np.bincount(idx[ok], minlength=len(edges) - 1)
+    tot = np.bincount(idx[ok], weights=P.ravel()[ok], minlength=len(edges) - 1)
+    qc = np.sqrt(edges[:-1] * edges[1:])
+    good = cnt > 0
+    df = pd.DataFrame({"q_por_mm": qc[good], "lambda_mm": 1.0 / qc[good], "PSD2D_mm4": tot[good] / cnt[good],
+                       "n_modos": cnt[good]})
+    out = {"R_n_blocos": n, "R_bloco_mm": t * dx}
+    for name, (lmin, lmax) in cfg["H_bands_mm"].items():
+        m = (df["lambda_mm"] >= lmin) & (df["lambda_mm"] <= lmax) & (df["PSD2D_mm4"] > 0)
+        if m.sum() < 5:
+            out[f"H2D_{name}_aviso"] = "pontos insuficientes na faixa"
+            continue
+        lx, ly = np.log10(df.loc[m, "q_por_mm"]), np.log10(df.loc[m, "PSD2D_mm4"])
+        slope, icpt = np.polyfit(lx, ly, 1)
+        r2 = 1.0 - np.sum((ly - (slope * lx + icpt)) ** 2) / np.sum((ly - ly.mean()) ** 2)
+        H = (-slope - 2.0) / 2.0
+        out.update({f"H2D_{name}": float(H), f"D2D_superficie_{name}": float(3.0 - H),
+                    f"H2D_{name}_beta": float(-slope), f"H2D_{name}_R2": float(r2)})
+    return out, df
+
+
 def areal_params(S: np.ndarray, dx: float, prefix: str, cfg: dict, acf: bool = True,
                  extras: dict | None = None) -> dict:
     out = height_stats_2d(S, "S")
@@ -846,6 +938,8 @@ def areal_params(S: np.ndarray, dx: float, prefix: str, cfg: dict, acf: bool = T
     curve = material_ratio_curve(h, 10001) if h.size else None    # uma vez para Rk e volume
     out.update({("S" + k): v for k, v in (rk_family(h, curve=curve) if h.size >= 20 else {}).items()})
     out.update(volume_params(h, curve=curve))
+    if curve is not None:
+        out.update(height_percentiles(h, curve))
     if extras is not None and curve is not None:
         _view_curves(h, curve, prefix, cfg, extras)
     del h, curve
@@ -883,12 +977,18 @@ def chain_areal(zbox: list, dx: float, cfg: dict, extras: dict | None = None,
     del Ss
     m = int(np.ceil(cfg["S_L_macro_mm"] / dx))                       # margem = L (efeito de borda)
     out = areal_params(SF[m:-m, m:-m], dx, "SF", cfg, extras=extras)
+    out.update({f"SF_{k}": v for k, v in g_factor_3d(SF[m:-m, m:-m], dx, cfg).items()})
+    rp, df_rp = radial_psd(SF[m:-m, m:-m], dx, cfg)                     # PSD radial 3D na SF
+    out.update(rp)
+    if tables is not None:
+        tables["psd_radial.csv"] = df_rp
 
     # SL5: + L = 5 mm
     SL = gauss(SF, cfg["S_L_macro_mm"], dx)
     np.subtract(SF, SL, out=SL)                                        # SL = SF - gauss(SF)
     del SF
     out.update(areal_params(SL[m:-m, m:-m], dx, "SL5", cfg, extras=extras))
+    out.update({f"SL5_{k}": v for k, v in g_factor_3d(SL[m:-m, m:-m], dx, cfg).items()})
     w2, df_w2 = wavelet_2d(SL[m:-m, m:-m], dx, cfg)                     # ondaletas 2D na SL5
     out.update(w2)
     if tables is not None:
@@ -1030,7 +1130,7 @@ def write_project_index(out: Path) -> dict:
 
 PROJECT_FILES = ("projeto.json", "resumo_geral.csv", "execucao.json", "resumo.json", "cadeiaA_segmentos.csv",
                  "espectro_terco_oitava.csv", "espectro_por_perfil.csv", "psd_media.csv", "previa.npz",
-                 "visualizacao.npz", "ondaletas_perfil.csv", "ondaletas_2d.csv", "erro.txt")
+                 "visualizacao.npz", "ondaletas_perfil.csv", "ondaletas_2d.csv", "psd_radial.csv", "erro.txt")
 
 
 def pack_project(out: Path) -> Path:
