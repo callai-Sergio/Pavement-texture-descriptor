@@ -253,3 +253,15 @@ def test_g_factor_3d_patches():
     S[::10, :] = -2.0                                                  # 4 de 40 linhas = 10 % fundos
     o = tb.g_factor_3d(S, dx, tb.load_config(None))
     assert o["g3D_n_trechos"] == 2 and o["g3D_pct"] == pytest.approx(90.0, abs=0.5)
+
+
+def test_filters_match_standards():
+    """ISO 16610-61: gaussiano transmite 50 % em λc (S 0,05; L 0,5; L 5 mm). ISO 13473-1 Anexo D: passa-baixa
+    2,40 mm ida e volta transmite 50 % em 2,40 mm. ISO 13473-4: terço de oitava −3 dB nas bordas."""
+    sys.path.insert(0, str(HERE.parent.parent / "tools"))
+    import verificar_filtros as vf
+    for lc in (0.05, 0.5, 5.0):
+        assert vf.measure_gauss(lc, np.array([lc]))[0] == pytest.approx(0.5, abs=0.005)
+    assert vf.measure_chain_a_lp(np.array([2.4]))[0] == pytest.approx(0.5, abs=0.005)
+    g = vf.third_octave_response(5.0, 0.1, [5.0, 5.0 * 10 ** 0.05])
+    assert g[0] == pytest.approx(0.0, abs=0.05) and g[1] == pytest.approx(-3.01, abs=0.1)
