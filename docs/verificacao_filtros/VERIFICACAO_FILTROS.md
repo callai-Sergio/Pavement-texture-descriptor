@@ -28,7 +28,7 @@ Transmissão teórica T(λ) = exp(−π(αλc/λ)²), α = √(ln2/π) = 0,4697.
 | 2.0 | 1 | 84.10 % | 84.09 % | 15.90 % |
 | 3.0 | 1.5 | 92.59 % | 92.59 % | 7.41 % |
 
-**L 5 mm (SL5 / ML5)** — T(λc) medido = 50.00 % (teoria 50 %), mesmo valor na outra direção: 50.00 %; maior desvio na tabela = 0.01 p.p. → OK.
+**L 5 mm (SL5)** — T(λc) medido = 50.00 % (teoria 50 %), mesmo valor na outra direção: 50.00 %; maior desvio na tabela = 0.01 p.p. → OK.
 
 | λ/λc | λ [mm] | T medido (passa-baixa) | T teoria | 1 − T medido (filtro L) |
 |---|---|---|---|---|

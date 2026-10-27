@@ -193,9 +193,6 @@ STRINGS: dict[str, dict[str, str]] = {
                  "pt": "Areal MICRO (L 0,5 mm, provisório)"},
     "ch_SF": {"en": "SF (S 0.05 mm, F plane)", "de": "SF (S 0,05 mm, F Ebene)", "pt": "SF (S 0,05 mm, F plano)"},
     "ch_SL5": {"en": "SL5 (+ L 5 mm)", "de": "SL5 (+ L 5 mm)", "pt": "SL5 (+ L 5 mm)"},
-    "pg_ML5": {"en": "Areal ML5 – MICRO + SL5 together (L 5 mm, no S)", "de": "Flächig ML5 – MICRO + SL5 zusammen (L 5 mm, ohne S)",
-               "pt": "Areal ML5 – MICRO + SL5 juntas (L 5 mm, sem S)"},
-    "ch_ML5": {"en": "ML5 (MICRO + SL5, L 5 mm)", "de": "ML5 (MICRO + SL5, L 5 mm)", "pt": "ML5 (MICRO + SL5, L 5 mm)"},
     "ch_MICRO": {"en": "MICRO (L 0.5 mm, provisional)", "de": "MICRO (L 0,5 mm, vorläufig)",
                  "pt": "MICRO (L 0,5 mm, provisório)"},
 

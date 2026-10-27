@@ -61,8 +61,6 @@ Cadeias implementadas (todas sobre a grade em mm, eixo maior = sentido da via):
                                SF   : S = 0,05 mm, F = plano
                                SL5  : S = 0,05 mm, F = plano, L = 5 mm   (par 100:1 da Tab. 1;
                                       N_is compatível com dx = 11 µm pela Tab. 3)
-                               ML5  : sem S digital, F = plano, L = 5 mm (MICRO + SL5 numa superfície só,
-                                      ~0,01–5 mm; descritivo, mesma ressalva de S da MICRO)
                                MICRO: sem S digital, F = plano, L = 0,5 mm (largura de banda fora do
                                       padrão da Tab. 1 -> PROVISÓRIO, ver resumo)
   Rk  Família Rk/Sk ........... ISO 13565-2 (secante 40 %, reta de mínimos quadrados, triângulos).
@@ -97,7 +95,7 @@ import numpy as np
 import pandas as pd
 from scipy import ndimage, signal
 
-VERSION = "3.4.0"
+VERSION = "3.4.1"
 FORMAT_VERSION = 1              # formato do projeto (projeto.json / visualizacao.npz)
 
 _trapz = getattr(np, "trapezoid", None) or np.trapz   # numpy < 2.0
@@ -962,14 +960,7 @@ def chain_areal(zbox: list, dx: float, cfg: dict, extras: dict | None = None,
     P = remove_plane(Z, dx)
     MI = gauss(P, cfg["S_L_micro_mm"], dx)
     np.subtract(P, MI, out=MI)                                         # MI = P - gauss(P)
-    # ML5: F = plano, L = 5 mm, sem S (MICRO + SL5 de uma vez)
-    m5 = int(np.ceil(cfg["S_L_macro_mm"] / dx))
-    ML = gauss(P, cfg["S_L_macro_mm"], dx)
-    np.subtract(P, ML, out=ML)                                         # ML = P - gauss5(P)
     del P
-    ml5 = areal_params(ML[m5:-m5, m5:-m5], dx, "ML5", cfg, extras=extras)
-    ml5["ML5_status"] = ("DESCRITIVO: banda ~0,01–5 mm (MICRO + SL5), sem S-filter digital; ver ressalva da MICRO")
-    del ML
     c = MI[mu:-mu, mu:-mu]
     micro = areal_params(c, dx, "MICRO", cfg, acf=False, extras=extras)
     cy, cx = c.shape[0] // 2, c.shape[1] // 2
@@ -1008,7 +999,6 @@ def chain_areal(zbox: list, dx: float, cfg: dict, extras: dict | None = None,
     del SL
 
     out.update(micro)                                                  # mesma ordem de colunas da v1
-    out.update(ml5)
     return out
 
 

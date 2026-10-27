@@ -97,7 +97,7 @@ def main():
               f"Passo dx = {DX} mm (3dT).", ""]
     curves = {}
     for name, lc in (("S 0,05 mm", cfg["S_nis_mm"]), ("L 0,5 mm (MICRO)", cfg["S_L_micro_mm"]),
-                     ("L 5 mm (SL5 / ML5)", cfg["S_L_macro_mm"])):
+                     ("L 5 mm (SL5)", cfg["S_L_macro_mm"])):
         lams = lc * np.array([0.5, 0.7, 1.0, 1.4, 2.0, 3.0])
         meas = measure_gauss(lc, lams)
         meas_y = measure_gauss(lc, np.array([lc]), along="y")[0]
