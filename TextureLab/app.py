@@ -65,7 +65,7 @@ UNITS = {
     "perfil_Rq_media": "mm", "perfil_Rk_media": "mm", "perfil_Rpk_media": "mm", "perfil_Rvk_media": "mm",
     "perfil_Rmr1_media": "%", "perfil_Rmr2_media": "%",
 }
-for _c in ("SF", "SL5", "MICRO", "ML5"):
+for _c in ("SF", "SL5", "MICRO"):
     for _p in ("Sa", "Sq", "Sp", "Sv", "Sz", "Sk", "Spk", "Svk", "Sal", "Vmp", "Vmc", "Vvc", "Vvv"):
         UNITS[f"{_c}_{_p}"] = "mm"
     UNITS[f"{_c}_Sdr_pct"] = "%"
@@ -84,7 +84,7 @@ PARAM_GROUPS = {
 }
 _AREAL = ["Sa", "Sq", "Ssk", "Sku", "Sp", "Sv", "Sz", "Sdq", "Sdr_pct", "Sk", "Spk", "Svk", "Smr1", "Smr2",
           "Vmp", "Vmc", "Vvc", "Vvv", "Sal", "Str"]
-for _c in ("SF", "SL5", "MICRO", "ML5"):
+for _c in ("SF", "SL5", "MICRO"):
     PARAM_GROUPS[_c] = [f"{_c}_{p}" for p in _AREAL]
 
 DEFAULT_PARAMS = ["MPD", "g_factor_media", "SF_Sq", "SL5_Sq", "SL5_Sdr_pct", "SL5_Ssk", "H_macro"]
@@ -96,7 +96,7 @@ ID_COLS = ["arquivo", "trecho", "revestimento", "mp", "nr", "data"]
 GROUP_OPTIONS = {"file": ["arquivo"], "section_surface": ["trecho", "revestimento"], "section": ["trecho"],
                  "surface": ["_revest_grupo"], "mp": ["mp"], "section_mp": ["trecho", "mp"]}
 GROUPINGS = [g for g in GROUP_OPTIONS if g != "file"]   # agrupamentos com mais de um arquivo por grupo
-AREAL_CHAINS = ["SF", "SL5", "MICRO", "ML5"]
+AREAL_CHAINS = ["SF", "SL5", "MICRO"]
 
 
 def pg_label(code: str) -> str:
