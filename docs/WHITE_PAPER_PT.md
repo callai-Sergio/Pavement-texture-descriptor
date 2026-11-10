@@ -2,7 +2,7 @@
 
 Cálculo em lote de descritores de textura de pavimento a partir de varreduras 3dT
 
-Versão 3.0.0 · 5 out. 2026 · Sergio Callai
+Versão 3.4.1 · 10 nov. 2026 · Sergio Callai
 
 > Os três diagramas da versão online (fluxo de processamento, esquema do MSD e curva de material) não são exportáveis para Markdown; aqui estão descritos em texto.
 
@@ -10,11 +10,13 @@ Versão 3.0.0 · 5 out. 2026 · Sergio Callai
 
 O `pipeline/texturelab_batch.py` lê varreduras 3D de pavimento do equipamento 3dT (arquivos LAZ) e calcula, sem interface e em lote, os descritores de textura definidos nas normas ISO 13473-1, 13473-4, 25178 e 13565-2. Cada arquivo gera uma pasta de resultados, e o lote inteiro gera uma tabela-resumo com uma linha por ponto de medição.
 
-- **Macrotextura por perfil:** MPD, MSD e ETD conforme a ISO 13473-1:2019.
+- **Macrotextura por perfil:** MPD e MSD conforme a ISO 13473-1:2019; g-factor conforme a DIN ISO 10844:2024-11, Anexo B.
 - **Espectro:** níveis de textura em terços de oitava conforme a ISO 13473-4:2024.
 - **Parâmetros areais:** alturas, inclinações, curva de material e autocorrelação (ISO 25178), em três bandas de comprimento de onda.
 - **Família Rk:** núcleo, picos e vales da curva de Abbott (ISO 13565-2), em perfil e em área.
-- **Expoente de Hurst e dimensão fractal:** descritivos, pela inclinação do espectro de potência, ajustados separadamente para micro e macrotextura.
+- **Expoente de Hurst e dimensão fractal:** descritivos, pela inclinação do espectro de potência, ajustados separadamente para micro e macrotextura; a partir da v3.3.0 também em 2D, pela PSD radial da superfície.
+- **Percentis de altura e g-factor 3D (v3.3.0):** P50/P70/P90/P95 e P90/P70 por superfície areal; o g-factor do Anexo B aplicado à superfície. Descritivos.
+- **Verificação dos filtros (v3.4.0):** cada filtro do pipeline é conferido contra a transmissão que a sua norma prescreve.
 
 O script foi verificado com sinais sintéticos de resposta conhecida e com o arquivo real B6 MP1 (SMA 11): MPD = 0,819 mm em 70 s por arquivo, numa única CPU. A microtextura sai marcada como provisória até que a resolução óptica do 3dT seja conhecida.
 
@@ -24,17 +26,26 @@ O script substitui o cálculo do aplicativo Streamlit TextureLab por um núcleo 
 
 | Grandeza | Norma | Situação |
 | --- | --- | --- |
-| MPD, MSD, ETD | ISO 13473-1:2019 | Conforme (medição pontual) |
+| MPD, MSD | ISO 13473-1:2019 | Conforme (medição pontual) |
+| g-factor e assimetria por segmento de 100 mm | DIN ISO 10844:2024-11, 5.3.2 e Anexo B | Conforme |
 | Nível de textura em terços de oitava | ISO 13473-4:2024, método 1 | Conforme |
 | Parâmetros areais S\* (bandas SF e SL5) | ISO 25178-2 e -3, filtro ISO 16610-61 | Conforme, com a escolha de bandas declarada |
 | Parâmetros areais da microtextura | ISO 25178-2 e -3 | Provisório |
 | Rk, Rpk, Rvk, Mr1, Mr2 e Sk, Spk, Svk | ISO 13565-2 | Conforme no algoritmo; sem o filtro especial da ISO 13565-1 |
 | Rq, Rsk, Rku por segmento | — | Descritivo, não é ISO 21920 |
 | Expoente de Hurst e dimensão fractal (micro e macro) | — | Descritivo, sem norma; micro provisório |
+| Hurst 2D pela PSD radial da SF (v3.3.0) | — | Descritivo, sem norma |
+| Percentis de altura P50–P95 e P90/P70 (v3.3.0) | — | Descritivo; lidos da curva de material da ISO 25178-2 |
+| g-factor 3D (v3.3.0) | análogo do Anexo B da DIN ISO 10844 | Descritivo, sem norma |
+| Energias e anisotropia por ondaletas (v3.2.0) | — | Descritivo, sem norma |
 
 **g-factor e assimetria (v3.2.0):** conforme a DIN ISO 10844:2024-11, cláusula 5.3.2 e Anexo B, por segmento de 100 mm do perfil do MPD (processamento da ISO 13473-1 sem passa-baixa, média zero); z_mid = (z_max + z_min)/2 e g = distribuição cumulativa onde z_mid cruza a curva de Abbott; média dos segmentos por ponto de medição (`g_factor_media`). A assimetria da 5.3.2 é o Rsk por segmento (ISO 13473-2), média em `perfil_Rsk_media`. O espectro da 5.3.3 pede bandas de 5 a 100 mm; com varreduras de ~257 mm e l ≥ 12·λ (ISO 13473-4) só as bandas até 20 mm são alcançáveis.
 
 **ETD:** a partir da v3.2.0 não é mais gravado (é só 1,1 · MPD).
+
+**Verificação dos filtros (v3.4.0):** o `tools/verificar_filtros.py` passa senoides de comprimento de onda conhecido pelas mesmas funções de filtro que o pipeline usa e compara a amplitude de saída com a transmissão teórica. Cobre o gaussiano da ISO 16610-61 em S 0,05 mm, L 0,5 mm e L 5 mm (50 % em λc nas duas direções), SL5 = SF − G(SF), o passa-baixa Butterworth da cadeia A da ISO 13473-1 (2,40 mm, ida e volta) e as bandas de terço de oitava da ISO 13473-4 / IEC 61260-1. Todos conferem; relatório e figura em `docs/verificacao_filtros/`.
+
+**ML5 (v3.4.0, removida na v3.4.1):** uma quarta superfície areal (F plano + L 5 mm, sem S-filter) foi testada e descartada, porque coincidia com a SL5 em até 0,01 no Ssk e 0,001 mm no Sk. Resultados da v3.4.0 ainda trazem colunas `ML5_*`.
 
 **Fora do escopo, de propósito:** ENDT (removido da ISO 10844 na edição de 2021) e os parâmetros de perfil da ISO 21920-2.
 
@@ -83,7 +94,7 @@ A mesma grade alimenta três cadeias independentes, cada uma com os filtros que 
 
 *Diagrama (versão online): Arquivo LAZ → Leitura (mm, via = eixo maior) → três cadeias em paralelo (Cadeia A · MPD, ISO 13473-1; Espectro, ISO 13473-4; Areal, ISO 25178 e 13565-2) → Resultados (pasta por MP, resumo geral CSV).*
 
-### 3.1 Cadeia A — MPD, MSD e ETD (ISO 13473-1:2019)
+### 3.1 Cadeia A — MPD e MSD (ISO 13473-1:2019)
 
 Mede a profundidade da macrotextura. Como o campo do 3dT tem no máximo 300 mm, aplicam-se as regras de medição pontual.
 
@@ -94,7 +105,7 @@ Mede a profundidade da macrotextura. Como o campo do 3dT tem no máximo 300 mm, 
 5. **Passa-baixa:** Butterworth de 2ª ordem projetado com −3 dB em 2,40 mm, aplicado ida e volta (corte efetivo de 3 mm). Os coeficientes são idênticos aos da Tabela D.2.
 6. **Segmentos:** dois segmentos de 100 mm por perfil, centralizados, com cerca de 28 mm de margem em cada ponta para afastar os transientes do filtro.
 7. **Supressão de rampa:** subtrai a reta de regressão de cada segmento, o método da norma para medição pontual (§7.6).
-8. **MSD:** média dos picos de cada metade do segmento menos o nível médio. **MPD:** média dos MSD válidos, com desvio-padrão e número de segmentos (§7.10). **ETD = 1,1 · MPD**, a fórmula da edição de 2019; a fórmula antiga (0,2 + 0,8 · MPD) não é usada.
+8. **MSD:** média dos picos de cada metade do segmento menos o nível médio. **MPD:** média dos MSD válidos, com desvio-padrão e número de segmentos (§7.10). O ETD (= 1,1 · MPD, fórmula da edição de 2019) só foi gravado até a v3.1.
 
 ### 3.2 Espectro de textura (ISO 13473-4:2024, método 1)
 
@@ -132,6 +143,7 @@ Para cada superfície são calculados:
 - **Curva de material:** Sk, Spk, Svk, Smr1, Smr2, pelo método da ISO 13565-2.
 - **Volumes:** Vmp, Vmc, Vvc e Vvv, com p = 10 % e q = 80 %.
 - **Autocorrelação:** Sal (distância em que a autocorrelação cai a 0,2) e Str (razão de isotropia). Em SF e SL5 são calculados sobre a superfície reduzida; em MICRO, sobre uma janela central de 22,5 × 22,5 mm.
+- **Percentis de altura (v3.3.0):** P50, P70, P90 e P95 das alturas em relação à média, lidos da mesma curva de material, e a razão P90/P70 (cauda superior da distribuição de alturas).
 
 ### 3.4 Família Rk (ISO 13565-2)
 
@@ -166,6 +178,37 @@ Nenhuma das normas usadas define esses parâmetros para pavimento. Por isso o sc
 
 **Limitações:** a dimensão de superfície (D = 3 − H) supõe textura isotrópica. A faixa micro é provisória pelo mesmo motivo da superfície MICRO: depende da resolução óptica do 3dT. O ruído do sensor (desvio-padrão de 9,6 µm segundo o fabricante) tende a reduzir H_micro.
 
+### 3.7 PSD 2D radial e Hurst 2D (descritivos, v3.3.0)
+
+O Hurst 1D da seção 3.6 olha só o sentido da via. A PSD radial usa a superfície SF inteira:
+
+1. Corta a superfície (sem a margem de 5 mm nas bordas) em blocos quadrados de 2 048 células (cerca de 22,5 mm), com 50 % de sobreposição; blocos com valores ausentes são pulados.
+2. Tira a média de cada bloco, aplica uma janela de Hann 2D e calcula o espectro de potência 2D por FFT. Tira a média entre os blocos.
+3. Faz a média do espectro em anéis de mesma frequência espacial q = |(fx, fy)|, em 60 intervalos logarítmicos, de 1/bloco até a frequência de Nyquist. A normalização faz a soma da PSD vezes df² igual à variância das alturas (unidade mm⁴).
+4. Nas mesmas faixas micro e macro do Hurst 1D, ajusta uma reta em log-log; PSD₂D ∝ q^−(2+2H) dá H, e D = 3 − H.
+
+A curva vai para `psd_radial.csv`; o ajuste, para `H2D_micro`, `H2D_macro` e os respectivos β, R² e D. Valem as mesmas limitações da 3.6; o ajuste 2D tem a vantagem de não depender do sentido da via.
+
+### 3.8 g-factor 3D (descritivo, v3.3.0)
+
+O g-factor do Anexo B da DIN ISO 10844 é definido em segmentos de perfil de 100 mm (cadeia A). O g-factor 3D aplica a mesma regra à superfície, na mesma escala, para poder ser comparado com o valor de perfil:
+
+1. Faz a média da superfície SF (e SL5) em células de 0,5 mm × 0,5 mm, como a reamostragem da ISO 13473-1.
+2. Corta em trechos de 100 mm no sentido da via, cada um com a largura toda.
+3. Em cada trecho, z_mid = (z_max + z_min)/2 e g = a fração de material em que a curva de Abbott cruza z_mid, como no Anexo B.
+4. Informa a média e o desvio-padrão dos trechos (`*_g3D_pct`, `*_g3D_desvio`) e o número de trechos.
+
+Cada trecho tem cerca de 85 vezes mais pontos que um segmento de perfil, então o z_min é mais fundo e o g-factor 3D fica acima do g de perfil. Na superfície inteira, na resolução nativa, o z_mid cairia num único ponto extremo (g ≈ 100 %); por isso são usadas as células de 0,5 mm e os trechos de 100 mm.
+
+### 3.9 Ondaletas (descritivo, v3.2.0)
+
+Transformada discreta de ondaletas ortonormal (Daubechies db4, periodização); a energia dos coeficientes é igual à variância.
+
+- **Perfil:** linhas na resolução nativa (uma por faixa de 0,5 mm); energia por oitava λ ∈ [2ʲ·dx, 2ʲ⁺¹·dx], em µm rms e dB re 1 µm, e as parcelas micro (< 0,5 mm) e macro (`ondaletas_perfil.csv`, `W_rms_micro_um`, `W_rms_macro_um`, `W_fracao_micro`).
+- **2D:** na superfície SL5, energia por oitava ao longo da via, na transversal e na diagonal; anisotropia = (E_via − E_transv)/(E_via + E_transv) (`ondaletas_2d.csv`, `W2_anisotropia_micro`, `W2_anisotropia_macro`).
+
+Por oitava, portanto não comparável 1:1 com o espectro de terço de oitava (uma oitava contém três bandas, ≈ +4,8 dB).
+
 ## 4. Saídas
 
 Cada arquivo LAZ gera uma pasta própria. No fim do lote, o script junta todos os resumos numa tabela única, com uma linha por MP. Os dados brutos nunca são alterados.
@@ -181,7 +224,11 @@ resultados/
       espectro_terco_oitava.csv
       espectro_por_perfil.csv
       psd_media.csv
+      psd_radial.csv            a partir da v3.3.0
+      ondaletas_perfil.csv      a partir da v3.2.0
+      ondaletas_2d.csv          a partir da v3.2.0
       previa.npz
+      visualizacao.npz          curvas para o visualizador
       erro.txt                  só se o arquivo falhar
   B248/
     ...
@@ -197,7 +244,10 @@ resultados/
 | `espectro_terco_oitava.csv` | Uma linha por banda: comprimento de onda central, nível médio em dB, desvio-padrão, número de perfis | Gráfico do espectro do MP |
 | `espectro_por_perfil.csv` | Nível de cada banda (coluna) em cada perfil (linha) | Dispersão do espectro; incerteza |
 | `psd_media.csv` | PSD média no sentido da via: frequência (mm⁻¹), comprimento de onda (mm) e PSD (mm³) | Conferir o ajuste de Hurst; gráfico log-log |
+| `psd_radial.csv` | PSD 2D radial da SF: frequência espacial q (mm⁻¹), comprimento de onda (mm), PSD₂D (mm⁴) e número de modos por intervalo (v3.3.0) | Conferir o Hurst 2D; gráfico log-log |
+| `ondaletas_perfil.csv`, `ondaletas_2d.csv` | Energia de ondaletas por oitava: perfil (µm rms, dB) e energias direcionais 2D na SL5 (v3.2.0) | Parcelas micro/macro; anisotropia |
 | `previa.npz` | Mapa de alturas reduzido 8× em cada eixo (cerca de 490 × 2 900 células, float16) e o passo em mm | Visualização 2D/3D leve |
+| `visualizacao.npz` | Curvas de Abbott, histogramas de alturas, perfis e segmentos de exemplo para o visualizador | Só para o visualizador; não altera os parâmetros |
 | `execucao.json` | Configuração completa, versão do script, Python, numpy, plataforma, data, duração e número de processos | Reprodutibilidade |
 
 ### 4.2 Campos do resumo
@@ -218,13 +268,17 @@ Alturas e volumes estão em mm (volumes em mm³/mm², que equivale a mm; multipl
 | | `Sk`, `Spk`, `Svk`, `Smr1`, `Smr2` | Núcleo, picos reduzidos e vales reduzidos da curva de material |
 | | `Vmp`, `Vmc`, `Vvc`, `Vvv` | Volume de material dos picos e do núcleo; volume de vazios do núcleo e dos vales |
 | | `Sal`, `Str`, `acf_aviso` | Comprimento de autocorrelação, razão de isotropia (0 = direcional, 1 = isotrópico) e aviso se a janela limita o cálculo |
+| | `P50`, `P70`, `P90`, `P95`, `P90_P70` | Percentis de altura em relação à média (mm) e a razão P90/P70 (v3.3.0) |
+| | `g3D_pct`, `g3D_desvio`, `g3D_n_trechos` (só SF e SL5) | g-factor 3D (%): média e desvio dos trechos de 100 mm e o número de trechos (v3.3.0) |
 | | `MICRO_status` | Texto que marca a microtextura como provisória |
 | Hurst e fractal (sufixo `_micro` ou `_macro`) | `H`, `D_perfil`, `D_superficie`, `H_beta`, `H_R2`, `H_faixa_mm`, `H_aviso`, `H_n_linhas`, `H_segmento_mm`, `H_micro_status` | Expoente de Hurst, dimensão fractal de perfil e de superfície, expoente da PSD, qualidade do ajuste, faixa usada e aviso se H sair de (0, 1) |
+| Hurst 2D (sufixo `_micro` ou `_macro`) | `H2D`, `D2D_superficie`, `H2D_beta`, `H2D_R2`, `H2D_aviso`; `R_n_blocos`, `R_bloco_mm` | Expoente de Hurst 2D, dimensão fractal de superfície, expoente da PSD₂D, qualidade do ajuste; número e tamanho dos blocos (v3.3.0) |
+| Ondaletas | `W_rms_micro_um`, `W_rms_macro_um`, `W_fracao_micro`, `W2_anisotropia_micro`, `W2_anisotropia_macro` | Energia de ondaletas micro e macro (µm rms), parcela micro, anisotropia 2D (v3.2.0) |
 | Execução | `status`, `erro`, `versao_script`, `leitura_s`, `cadeia_A_s`, `espectro_s`, `hurst_s`, `areal_s`, `total_s` | Resultado e tempo de cada etapa (s) |
 
 ### 4.3 Como ler os resultados
 
-- **MPD e ETD** são os números para comparar com outros equipamentos e com a mancha de areia. O MPD de um local é a média dos MPs, informada com o desvio-padrão e o número de segmentos.
+- **MPD** é o número para comparar com outros equipamentos e com a mancha de areia (ETD = 1,1 · MPD, se for preciso). O MPD de um local é a média dos MPs, informada com o desvio-padrão e o número de segmentos.
 - **O espectro** mostra em que comprimentos de onda está a energia da textura. É a base para estudos de ruído pneu-pavimento.
 - **Ssk negativo** indica uma superfície dominada por vazios (textura negativa, típica de SMA). Ssk positivo indica uma superfície dominada por picos.
 - **SF** descreve a textura inteira, **SL5** isola a escala dos agregados finos e **MICRO** descreve a aspereza dos agregados, ainda como valor provisório.
@@ -254,13 +308,13 @@ y_i &= \frac{x_i + 2x_{i-1} + x_{i-2}}{A_0} + A_1\, y_{i-2} + A_2\, y_{i-1} \\
 \end{aligned}
 ```
 
-**Supressão de rampa, MSD, MPD e ETD (ISO 13473-1).** Em cada segmento de 100 mm, subtrai-se a reta de mínimos quadrados; o MSD compara os picos das duas metades com o nível médio:
+**Supressão de rampa, MSD e MPD (ISO 13473-1).** Em cada segmento de 100 mm, subtrai-se a reta de mínimos quadrados; o MSD compara os picos das duas metades com o nível médio:
 
 ```math
 \begin{aligned}
 z'(x) &= z(x) - (a + b\,x) \\
 MSD &= \frac{\max_{\text{1ª metade}} z' + \max_{\text{2ª metade}} z'}{2} - \overline{z'} \\
-MPD &= \frac{1}{N}\sum_{j=1}^{N} MSD_j, \qquad ETD = 1{,}1 \cdot MPD
+MPD &= \frac{1}{N}\sum_{j=1}^{N} MSD_j
 \end{aligned}
 ```
 
@@ -344,11 +398,32 @@ D_{\text{perfil}} &= 2 - H, \qquad D_{\text{superfície}} = 3 - H
 \end{aligned}
 ```
 
+**PSD 2D radial e Hurst 2D (descritivos, v3.3.0).** Para cada bloco de lado t (t × t células, passo Δx) com a janela de Hann 2D w, e a média radial no anel de frequência q:
+
+```math
+\begin{aligned}
+C(f_x, f_y) &= \frac{\Delta x^2}{\sum w^2} \left\langle \left| \mathcal{F}\{ w \cdot (z - \bar{z}) \} \right|^2 \right\rangle_{\text{blocos}}, \qquad \sum C \, \Delta f^2 = \sigma_z^2 \\
+C_{2D}(q) &= \left\langle C(f_x, f_y) \right\rangle_{|(f_x, f_y)| \approx q} \propto q^{-(2 + 2H)} \quad \Rightarrow \quad H = \frac{\beta - 2}{2}, \qquad D = 3 - H
+\end{aligned}
+```
+
+**Percentis de altura (v3.3.0).** O p-ésimo percentil é a curva de material em Mr = 100 − p, em relação à altura média:
+
+```math
+P_p = c(100 - p) - \bar{z}, \qquad p \in \{50, 70, 90, 95\}, \qquad \text{razão } P_{90}/P_{70}
+```
+
+**g-factor (Anexo B da DIN ISO 10844) e g-factor 3D.** Em cada segmento de 100 mm (perfil) ou trecho de 100 mm de células de 0,5 mm (superfície), com Mr em % contado a partir do ponto mais alto:
+
+```math
+z_{\text{mid}} = \frac{z_{\max} + z_{\min}}{2}, \qquad g = Mr \;\text{ tal que }\; c(Mr) = z_{\text{mid}}, \qquad g_{3D} = \frac{1}{N}\sum_{j=1}^{N} g_j
+```
+
 ## 5. Como executar
 
 O script é um arquivo Python único. Roda sem interface e sem GPU.
 
-**Requisitos:** Python 3.10 ou mais novo e cerca de 4 GB de RAM por arquivo processado em paralelo.
+**Requisitos:** Python 3.11 ou mais novo e cerca de 4 GB de RAM por arquivo processado em paralelo. No servidor compartilhado, use o `pipeline/servidor.sh` (venv próprio, limites de CPU, RAM e disco, pausa e retomada); veja `pipeline/README.md`.
 
 ```bash
 pip install -r pipeline/requirements.txt
@@ -383,7 +458,7 @@ Os parâmetros das normas (largura de faixa, filtros, bandas) ficam no dicionár
 
 | Norma | Título resumido | Usada para |
 | --- | --- | --- |
-| ISO 13473-1:2019 (DIN EN ISO 13473-1:2021-11) | Profundidade média de perfil | Cadeia A: MPD, MSD, ETD; Anexos D e E |
+| ISO 13473-1:2019 (DIN EN ISO 13473-1:2021-11) | Profundidade média de perfil | Cadeia A: MPD, MSD; Anexos D e E |
 | ISO 13473-2:2002 (DIN ISO 13473-2:2004-07) | Terminologia e requisitos da análise de perfis | Bandas de terço de oitava; faixas micro e macro |
 | ISO 13473-4:2024 | Análise espectral de perfis | Espectro: método 1, Anexos D e F |
 | ISO 13473-5 (DIN EN ISO 13473-5:2024-05) | Megatextura | Definição de microtextura (< 0,5 mm) |
@@ -392,4 +467,5 @@ Os parâmetros das normas (largura de faixa, filtros, bandas) ficam no dicionár
 | ISO 16610-61 | Filtro gaussiano areal | Filtros S e L |
 | ISO 13565-2:1996 (DIN EN ISO 13565-2:1998-04) | Curva de material: Rk | Família Rk e Sk |
 | IEC 61260-1 | Filtros de banda de oitava | Bordas das bandas de terço de oitava |
-| ISO 10844, ISO 21920-2, ISO 13565-1 | — | Ainda não aplicadas |
+| DIN ISO 10844:2024-11 | Pistas de ensaio para ruído pneu-pavimento | g-factor e assimetria (5.3.2, Anexo B); g-factor 3D por analogia |
+| ISO 21920-2, ISO 13565-1 | — | Não aplicadas |
