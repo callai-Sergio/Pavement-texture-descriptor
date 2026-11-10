@@ -9,6 +9,10 @@
 - README rewritten for v3.4 (version history, filter report, Excel exporter); the legacy v2.x feature list is now labelled as such.
 - White paper EN/PT and PDFs updated to 3.4.1: new sections 3.7 radial 2D PSD and 2D Hurst, 3.8 3D g-factor, 3.9 wavelets; height percentiles; filter verification; ML5 note; new output files and summary fields; equations for the radial PSD, percentiles and (3D) g-factor; ETD references removed; DIN ISO 10844:2024-11 in the references.
 
+### Tests
+- `TextureLab/tests/test_app_smoke.py`: runs the viewer headless (Streamlit `AppTest`) on a real project in all views and EN/DE/PT, and checks that the radial PSD chart shows the H2D of the summary. Set `TEXTURELAB_TEST_PROJECT` to a results folder or `.tlproj`; skipped otherwise.
+- `TextureLab/tests/test_descriptors.py` (legacy v2.x code) is skipped when numba is missing, so the viewer venv runs the suite without errors.
+
 ### Unchanged
 - Calculation core stays 3.4.1, so existing results are not recomputed.
 

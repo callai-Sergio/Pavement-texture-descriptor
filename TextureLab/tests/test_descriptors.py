@@ -7,6 +7,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
 import pytest
+
+# src/descriptors.py é o código do app legado (v2.x) e usa numba, que não está no venv do visualizador
+# (requirements-viewer.txt); com o venv completo (requirements.txt) estes testes rodam.
+pytest.importorskip("numba", reason="numba ausente: testes do app legado (instale TextureLab/requirements.txt)")
+
 from src.descriptors import (
     calc_ra, calc_rq, calc_rsk, calc_rku, calc_rz_iso,
     calc_core_stats_1d, calc_core_stats_3d, calc_sdr,
