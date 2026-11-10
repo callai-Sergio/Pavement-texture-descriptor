@@ -185,6 +185,12 @@ STRINGS: dict[str, dict[str, str]] = {
     "pg_profile": {"en": "Profile (descriptive)", "de": "Profil (deskriptiv)", "pt": "Perfil (descritivo)"},
     "pg_hurst": {"en": "Hurst / fractal (descriptive)", "de": "Hurst / fraktal (deskriptiv)",
                  "pt": "Hurst / fractal (descritivo)"},
+    "pg_hurst2d": {"en": "Hurst 2D from the radial PSD of SF (descriptive)",
+                   "de": "Hurst 2D aus der radialen PSD von SF (deskriptiv)",
+                   "pt": "Hurst 2D pela PSD radial da SF (descritivo)"},
+    "pg_g3d": {"en": "3D g-factor (DIN ISO 10844 Annex B on the surface, descriptive)",
+               "de": "3D-g-Faktor (DIN ISO 10844 Anhang B auf der Fläche, deskriptiv)",
+               "pt": "g-factor 3D (Anexo B da DIN ISO 10844 na superfície, descritivo)"},
     "pg_SF": {"en": "Areal SF – ISO 25178 (S 0.05 mm, F plane)", "de": "Flächig SF – ISO 25178 (S 0,05 mm, F Ebene)",
               "pt": "Areal SF – ISO 25178 (S 0,05 mm, F plano)"},
     "pg_SL5": {"en": "Areal SL5 – ISO 25178 (+ L 5 mm)", "de": "Flächig SL5 – ISO 25178 (+ L 5 mm)",
@@ -302,6 +308,18 @@ STRINGS: dict[str, dict[str, str]] = {
                           "des Bereichs gezeichnet.",
                     "pt": "Retas tracejadas: inclinação ajustada no servidor (PSD ∝ λ^β), desenhadas pela média "
                           "geométrica da faixa."},
+    "psd_radial_mean": {"en": "radial mean", "de": "radiales Mittel", "pt": "média radial"},
+    "psd_radial_title": {"en": "Radial 2D PSD of the SF surface and 2D Hurst fit – descriptive",
+                         "de": "Radiale 2D-PSD der SF-Fläche und 2D-Hurst-Anpassung – deskriptiv",
+                         "pt": "PSD 2D radial da superfície SF e ajuste de Hurst 2D – descritivo"},
+    "psd_radial_caption": {"en": "Square tiles with a 2D Hann window, radial mean in log bins. Dashed lines: slope "
+                                 "fitted on the server (PSD₂D ∝ q^-(2+2H)), drawn through the geometric mean of the band.",
+                           "de": "Quadratische Kacheln mit 2D-Hann-Fenster, radiales Mittel in log. Klassen. "
+                                 "Gestrichelt: auf dem Server angepasste Steigung (PSD₂D ∝ q^-(2+2H)), durch das "
+                                 "geometrische Mittel des Bereichs gezeichnet.",
+                           "pt": "Blocos quadrados com janela de Hann 2D, média radial em classes log. Retas "
+                                 "tracejadas: inclinação ajustada no servidor (PSD₂D ∝ q^-(2+2H)), desenhadas pela "
+                                 "média geométrica da faixa."},
     "no_psd": {"en": "No PSD in this result (core before v3).", "de": "Keine PSD in diesem Ergebnis (Kern vor v3).",
                "pt": "Sem PSD neste resultado (núcleo anterior à v3)."},
     "msd_hist_title": {"en": "MSD per 100 mm segment (valid)", "de": "MSD je 100-mm-Segment (gültig)",

@@ -1,5 +1,13 @@
 # TextureLab Changelog
 
+## [3.4.2] - 2026-11-10
+
+### Added
+- **Viewer shows the 3.3.0 fields**: P50/P70/P90/P95 and P90/P70 in the SF, SL5 and MICRO areal groups; new groups "Hurst 2D" (`H2D_*`, `D2D_superficie_*`) and "3D g-factor" (`SF/SL5_g3D_pct`, `_desvio`); radial 2D PSD chart with the server's 2D Hurst fit lines in the "PSD / Hurst" tab (EN/DE/PT). Older projects without these fields open as before.
+
+### Unchanged
+- Calculation core stays 3.4.1, so existing results are not recomputed.
+
 ## [3.4.1] - 2026-10-27
 
 ### Removed
@@ -27,7 +35,7 @@
 - **Excel exporter of medians** per surface (section + surface course): `tools/exportar_medianas.py <project>` reads a folder or `.tlproj` and writes areal (SL5, MICRO) and normative profile parameters plus vectors (L_tx per third octave, 1D and radial PSD on a common 60-point log λ grid, height PDF), with readable column names and units.
 
 ### Known gaps
-- The viewer does not show the new 3.3.0 fields yet (percentiles, g3D, 2D Hurst, radial PSD); they are in the results and in the Excel export.
+- The viewer did not show the new 3.3.0 fields (percentiles, g3D, 2D Hurst, radial PSD) until 3.4.2.
 
 ## [3.2.2] - 2026-10-22
 

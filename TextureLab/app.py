@@ -29,7 +29,7 @@ sys.path.insert(0, str(ROOT))
 from components.i18n import LANGUAGES, DEFAULT_LANGUAGE, set_language, t  # noqa: E402
 from components.project_reader import Project, ProjectError  # noqa: E402
 
-APP_VERSION = "3.4.1"
+APP_VERSION = "3.4.2"
 APP_AUTHOR = "Sergio Callai"
 APP_YEAR = "2026"
 SHOW_PCA = False        # PCA desativada por enquanto na vista Estatística; True para reativar
@@ -71,6 +71,11 @@ for _c in ("SF", "SL5", "MICRO"):
     UNITS[f"{_c}_Sdr_pct"] = "%"
     UNITS[f"{_c}_Smr1"] = "%"
     UNITS[f"{_c}_Smr2"] = "%"
+    for _p in ("P50", "P70", "P90", "P95"):
+        UNITS[f"{_c}_{_p}"] = "mm"
+for _c in ("SF", "SL5"):
+    UNITS[f"{_c}_g3D_pct"] = "%"
+    UNITS[f"{_c}_g3D_desvio"] = "%"
 
 PARAM_GROUPS = {
     "chainA": ["MPD", "MPD_desvio", "A_n_segmentos_validos"],
@@ -81,9 +86,14 @@ PARAM_GROUPS = {
                  "W2_anisotropia_macro"],
     "hurst": ["H_macro", "D_superficie_macro", "H_macro_R2",
                                      "H_micro", "D_superficie_micro", "H_micro_R2"],
+    # Hurst 2D pela PSD radial da SF (núcleo 3.3.0)
+    "hurst2d": ["H2D_macro", "D2D_superficie_macro", "H2D_macro_R2",
+                "H2D_micro", "D2D_superficie_micro", "H2D_micro_R2"],
+    # g-factor 3D: análogo do Anexo B da DIN ISO 10844 sobre a superfície (núcleo 3.3.0, sem norma)
+    "g3d": ["SF_g3D_pct", "SF_g3D_desvio", "SL5_g3D_pct", "SL5_g3D_desvio"],
 }
 _AREAL = ["Sa", "Sq", "Ssk", "Sku", "Sp", "Sv", "Sz", "Sdq", "Sdr_pct", "Sk", "Spk", "Svk", "Smr1", "Smr2",
-          "Vmp", "Vmc", "Vvc", "Vvv", "Sal", "Str"]
+          "Vmp", "Vmc", "Vvc", "Vvv", "Sal", "Str", "P50", "P70", "P90", "P95", "P90_P70"]
 for _c in ("SF", "SL5", "MICRO"):
     PARAM_GROUPS[_c] = [f"{_c}_{p}" for p in _AREAL]
 
@@ -619,6 +629,31 @@ def view_file():
             st.caption(t("psd_caption"))
         else:
             st.info(t("no_psd"))
+        rad = proj.table(arq, "psd_radial.csv")
+        if rad is not None and len(rad):
+            fig = go.Figure(go.Scatter(x=rad["lambda_mm"], y=rad["PSD2D_mm4"], mode="lines+markers",
+                                       name=t("psd_radial_mean"), line=dict(width=1), marker=dict(size=3)))
+            for band, (lo, hi) in {"micro": (0.05, 0.5), "macro": (0.5, 20.0)}.items():
+                fig.add_shape(type="rect", xref="x", yref="paper", x0=lo, x1=hi, y0=0, y1=1,
+                              fillcolor="gray", opacity=0.08, line_width=0)
+                fig.add_annotation(x=np.log10(np.sqrt(lo * hi)), y=1, xref="x", yref="paper",
+                                   text=band, showarrow=False, yanchor="bottom")
+                beta = r.get(f"H2D_{band}_beta")              # PSD_2D ∝ q^-β = λ^β
+                if beta is not None and np.isfinite(beta):
+                    m = (rad["lambda_mm"] >= lo) & (rad["lambda_mm"] <= hi) & (rad["PSD2D_mm4"] > 0)
+                    if m.any():
+                        lam = rad.loc[m, "lambda_mm"].to_numpy()
+                        y0 = 10 ** np.mean(np.log10(rad.loc[m, "PSD2D_mm4"]))
+                        l0 = 10 ** np.mean(np.log10(lam))
+                        xx = np.array([lam.min(), lam.max()])
+                        fig.add_scatter(x=xx, y=y0 * (xx / l0) ** beta, mode="lines", line=dict(dash="dash"),
+                                        name=f"{band}: H={r.get(f'H2D_{band}'):.3f} "
+                                             f"(R²={r.get(f'H2D_{band}_R2'):.3f})")
+            fig.update_xaxes(type="log", title="λ [mm]")
+            fig.update_yaxes(type="log", title="PSD 2D [mm⁴]")
+            fig.update_layout(height=450, title=t("psd_radial_title"))
+            st.plotly_chart(fig, key="psd_radial")
+            st.caption(t("psd_radial_caption"))
     with tabs[5]:
         seg = proj.table(arq, "cadeiaA_segmentos.csv")
         if seg is not None and len(seg):
