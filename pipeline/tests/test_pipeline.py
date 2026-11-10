@@ -245,6 +245,21 @@ def test_height_percentiles_and_g3d():
     assert o["P90_P70"] == pytest.approx(1.0)
 
 
+def test_robust_skewness():
+    """Bowley da exponencial = ln(4/3)/ln 3 ≈ 0,262; uma normal com 0,3 % de vales muito fundos tem Ssk
+    fortemente negativo, mas o Ssk aparado (0,5 % e 2 % por cauda) volta para perto de zero."""
+    rng = np.random.default_rng(0)
+    e = rng.exponential(1.0, 400_000)
+    o = tb.robust_skewness(e, tb.material_ratio_curve(e, 10001), (0.5, 2.0))
+    assert o["Ssk_bowley"] == pytest.approx(np.log(4 / 3) / np.log(3), abs=0.01)
+    n = rng.normal(0.0, 1.0, 400_000)
+    n[:1200] = -15.0                                                   # 0,3 % de vales fundos
+    raw = float(np.mean((n - n.mean()) ** 3) / np.std(n) ** 3)
+    o = tb.robust_skewness(n, tb.material_ratio_curve(n, 10001), (0.5, 2.0))
+    assert raw < -3
+    assert abs(o["Ssk_trim05"]) < 0.08 and abs(o["Ssk_trim2"]) < 0.08 and abs(o["Ssk_bowley"]) < 0.02
+
+
 def test_g_factor_3d_patches():
     """Plano com poços estreitos (10 % da área): cada trecho de 100 mm tem z_mid no meio da profundidade
     e g ≈ 90 %; dois trechos de 100 mm numa faixa de 200 × 20 mm em células de 0,5 mm."""

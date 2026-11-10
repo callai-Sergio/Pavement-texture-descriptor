@@ -2,7 +2,7 @@
 
 Batch computation of pavement texture descriptors from 3dT scans
 
-Version 3.4.1 · 10 Nov 2026 · Sergio Callai
+Version 3.5.0 · 10 Nov 2026 · Sergio Callai
 
 > The three diagrams of the online version (processing flow, MSD schematic and material ratio curve) cannot be exported to Markdown; they are described in text here. File and field names are in Portuguese, as written by the script.
 
@@ -37,6 +37,7 @@ The script replaces the calculations of the Streamlit TextureLab app with a sing
 | 2D Hurst from the radial PSD of SF (v3.3.0) | — | Descriptive, no standard |
 | Height percentiles P50–P95 and P90/P70 (v3.3.0) | — | Descriptive; read from the ISO 25178-2 material ratio curve |
 | 3D g-factor (v3.3.0) | analogue of DIN ISO 10844 Annex B | Descriptive, no standard |
+| Robust skewness: trimmed Ssk and Bowley (v3.5.0) | — | Descriptive, no standard; Ssk stays the normative value |
 | Wavelet energies and anisotropy (v3.2.0) | — | Descriptive, no standard |
 
 **g-factor and skewness (v3.2.0):** per DIN ISO 10844:2024-11, clause 5.3.2 and Annex B, per 100 mm segment of the MPD profile (ISO 13473-1 processing without low-pass, zero mean); z_mid = (z_max + z_min)/2 and g = cumulative distribution where z_mid crosses the bearing area curve; mean of the segments per measuring point (`g_factor_media`). The skewness of 5.3.2 is the per-segment Rsk (ISO 13473-2), mean in `perfil_Rsk_media`. Clause 5.3.3 asks for bands from 5 to 100 mm; with ~257 mm scans and l ≥ 12·λ (ISO 13473-4) only bands up to 20 mm are reachable.
@@ -144,6 +145,7 @@ For each surface the script computes:
 - **Volumes:** Vmp, Vmc, Vvc and Vvv, with p = 10 % and q = 80 %.
 - **Autocorrelation:** Sal (distance at which the autocorrelation drops to 0.2) and Str (isotropy ratio). For SF and SL5 they are computed on a reduced surface; for MICRO, on a central 22.5 × 22.5 mm window.
 - **Height percentiles (v3.3.0):** P50, P70, P90 and P95 of the heights relative to the mean, read from the same material ratio curve, and the ratio P90/P70 (upper tail of the height distribution).
+- **Robust skewness (v3.5.0):** Ssk is a third moment and is dominated by the few deepest valleys and highest peaks. `Ssk_trim05` and `Ssk_trim2` recompute it after cutting 0.5 % or 2 % from each tail; `Ssk_bowley` uses only the quartiles. Descriptive; Ssk stays the normative value.
 
 ### 3.4 Rk family (ISO 13565-2)
 
@@ -269,6 +271,7 @@ Heights and volumes are in mm (volumes in mm³/mm², which equals mm; multiply b
 | | `Vmp`, `Vmc`, `Vvc`, `Vvv` | Material volume of peaks and core; void volume of core and valleys |
 | | `Sal`, `Str`, `acf_aviso` | Autocorrelation length, isotropy ratio (0 = directional, 1 = isotropic) and a warning if the window limits the computation |
 | | `P50`, `P70`, `P90`, `P95`, `P90_P70` | Height percentiles relative to the mean (mm) and the ratio P90/P70 (v3.3.0) |
+| | `Ssk_trim05`, `Ssk_trim2`, `Ssk_bowley` | Skewness without 0.5 % / 2 % of each tail and Bowley quartile skewness (v3.5.0) |
 | | `g3D_pct`, `g3D_desvio`, `g3D_n_trechos` (SF and SL5 only) | 3D g-factor (%): mean and std over the 100 mm patches, and their number (v3.3.0) |
 | | `MICRO_status` | Text marking the microtexture as provisional |
 | Hurst and fractal (suffix `_micro` or `_macro`) | `H`, `D_perfil`, `D_superficie`, `H_beta`, `H_R2`, `H_faixa_mm`, `H_aviso`, `H_n_linhas`, `H_segmento_mm`, `H_micro_status` | Hurst exponent, profile and surface fractal dimension, PSD exponent, fit quality, range used and a warning if H falls outside (0, 1) |
@@ -280,7 +283,7 @@ Heights and volumes are in mm (volumes in mm³/mm², which equals mm; multiply b
 
 - **MPD** is the number to compare with other devices and with the sand patch (ETD = 1.1 · MPD if needed). The MPD of a site is the mean of its MPs, reported with the standard deviation and the number of segments.
 - **The spectrum** shows at which wavelengths the texture energy lies. It is the basis for tyre/road noise studies.
-- **Negative Ssk** means a surface dominated by voids (negative texture, typical of SMA). Positive Ssk means a surface dominated by peaks.
+- **Negative Ssk** means a surface dominated by voids (negative texture, typical of SMA). Positive Ssk means a surface dominated by peaks. When Ssk and the trimmed or Bowley skewness disagree in sign, a small fraction of extreme points decides the Ssk, not the bulk of the surface.
 - **SF** describes the whole texture, **SL5** isolates the scale of fine aggregate and **MICRO** describes aggregate harshness, still as a provisional value.
 
 ### 4.4 Parameter equations
@@ -411,6 +414,12 @@ C_{2D}(q) &= \left\langle C(f_x, f_y) \right\rangle_{|(f_x, f_y)| \approx q} \pr
 
 ```math
 P_p = c(100 - p) - \bar{z}, \qquad p \in \{50, 70, 90, 95\}, \qquad \text{ratio } P_{90}/P_{70}
+```
+
+**Robust skewness (v3.5.0).** With Q_p the p-th percentile, the trimmed skewness uses only the heights between Q_t and Q_{100−t} (mean z̄_t and RMS σ_t of that subset), for t = 0.5 % and 2 %:
+
+```math
+S_{sk,\text{trim}\,t} = \frac{1}{\sigma_t^3}\,\frac{1}{N_t}\sum_{Q_t \le z_i \le Q_{100-t}} (z_i - \bar{z}_t)^3, \qquad S_{sk,\text{Bowley}} = \frac{Q_{75} + Q_{25} - 2\,Q_{50}}{Q_{75} - Q_{25}}
 ```
 
 **g-factor (DIN ISO 10844 Annex B) and 3D g-factor.** In each 100 mm segment (profile) or 100 mm patch of 0.5 mm cells (surface), with Mr in % counted from the highest point:

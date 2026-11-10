@@ -2,7 +2,7 @@
 
 Cálculo em lote de descritores de textura de pavimento a partir de varreduras 3dT
 
-Versão 3.4.1 · 10 nov. 2026 · Sergio Callai
+Versão 3.5.0 · 10 nov. 2026 · Sergio Callai
 
 > Os três diagramas da versão online (fluxo de processamento, esquema do MSD e curva de material) não são exportáveis para Markdown; aqui estão descritos em texto.
 
@@ -37,6 +37,7 @@ O script substitui o cálculo do aplicativo Streamlit TextureLab por um núcleo 
 | Hurst 2D pela PSD radial da SF (v3.3.0) | — | Descritivo, sem norma |
 | Percentis de altura P50–P95 e P90/P70 (v3.3.0) | — | Descritivo; lidos da curva de material da ISO 25178-2 |
 | g-factor 3D (v3.3.0) | análogo do Anexo B da DIN ISO 10844 | Descritivo, sem norma |
+| Assimetria robusta: Ssk aparado e Bowley (v3.5.0) | — | Descritivo, sem norma; o Ssk continua sendo o valor normativo |
 | Energias e anisotropia por ondaletas (v3.2.0) | — | Descritivo, sem norma |
 
 **g-factor e assimetria (v3.2.0):** conforme a DIN ISO 10844:2024-11, cláusula 5.3.2 e Anexo B, por segmento de 100 mm do perfil do MPD (processamento da ISO 13473-1 sem passa-baixa, média zero); z_mid = (z_max + z_min)/2 e g = distribuição cumulativa onde z_mid cruza a curva de Abbott; média dos segmentos por ponto de medição (`g_factor_media`). A assimetria da 5.3.2 é o Rsk por segmento (ISO 13473-2), média em `perfil_Rsk_media`. O espectro da 5.3.3 pede bandas de 5 a 100 mm; com varreduras de ~257 mm e l ≥ 12·λ (ISO 13473-4) só as bandas até 20 mm são alcançáveis.
@@ -144,6 +145,7 @@ Para cada superfície são calculados:
 - **Volumes:** Vmp, Vmc, Vvc e Vvv, com p = 10 % e q = 80 %.
 - **Autocorrelação:** Sal (distância em que a autocorrelação cai a 0,2) e Str (razão de isotropia). Em SF e SL5 são calculados sobre a superfície reduzida; em MICRO, sobre uma janela central de 22,5 × 22,5 mm.
 - **Percentis de altura (v3.3.0):** P50, P70, P90 e P95 das alturas em relação à média, lidos da mesma curva de material, e a razão P90/P70 (cauda superior da distribuição de alturas).
+- **Assimetria robusta (v3.5.0):** o Ssk é um terceiro momento e é dominado pelos poucos vales mais fundos e picos mais altos. `Ssk_trim05` e `Ssk_trim2` o recalculam depois de cortar 0,5 % ou 2 % de cada cauda; `Ssk_bowley` usa só os quartis. Descritivos; o Ssk continua sendo o valor normativo.
 
 ### 3.4 Família Rk (ISO 13565-2)
 
@@ -269,6 +271,7 @@ Alturas e volumes estão em mm (volumes em mm³/mm², que equivale a mm; multipl
 | | `Vmp`, `Vmc`, `Vvc`, `Vvv` | Volume de material dos picos e do núcleo; volume de vazios do núcleo e dos vales |
 | | `Sal`, `Str`, `acf_aviso` | Comprimento de autocorrelação, razão de isotropia (0 = direcional, 1 = isotrópico) e aviso se a janela limita o cálculo |
 | | `P50`, `P70`, `P90`, `P95`, `P90_P70` | Percentis de altura em relação à média (mm) e a razão P90/P70 (v3.3.0) |
+| | `Ssk_trim05`, `Ssk_trim2`, `Ssk_bowley` | Assimetria sem 0,5 % / 2 % de cada cauda e assimetria de Bowley pelos quartis (v3.5.0) |
 | | `g3D_pct`, `g3D_desvio`, `g3D_n_trechos` (só SF e SL5) | g-factor 3D (%): média e desvio dos trechos de 100 mm e o número de trechos (v3.3.0) |
 | | `MICRO_status` | Texto que marca a microtextura como provisória |
 | Hurst e fractal (sufixo `_micro` ou `_macro`) | `H`, `D_perfil`, `D_superficie`, `H_beta`, `H_R2`, `H_faixa_mm`, `H_aviso`, `H_n_linhas`, `H_segmento_mm`, `H_micro_status` | Expoente de Hurst, dimensão fractal de perfil e de superfície, expoente da PSD, qualidade do ajuste, faixa usada e aviso se H sair de (0, 1) |
@@ -280,7 +283,7 @@ Alturas e volumes estão em mm (volumes em mm³/mm², que equivale a mm; multipl
 
 - **MPD** é o número para comparar com outros equipamentos e com a mancha de areia (ETD = 1,1 · MPD, se for preciso). O MPD de um local é a média dos MPs, informada com o desvio-padrão e o número de segmentos.
 - **O espectro** mostra em que comprimentos de onda está a energia da textura. É a base para estudos de ruído pneu-pavimento.
-- **Ssk negativo** indica uma superfície dominada por vazios (textura negativa, típica de SMA). Ssk positivo indica uma superfície dominada por picos.
+- **Ssk negativo** indica uma superfície dominada por vazios (textura negativa, típica de SMA). Ssk positivo indica uma superfície dominada por picos. Quando o Ssk e a assimetria aparada ou de Bowley têm sinais diferentes, quem decide o Ssk é uma pequena fração de pontos extremos, não o grosso da superfície.
 - **SF** descreve a textura inteira, **SL5** isola a escala dos agregados finos e **MICRO** descreve a aspereza dos agregados, ainda como valor provisório.
 
 ### 4.4 Equações dos parâmetros
@@ -411,6 +414,12 @@ C_{2D}(q) &= \left\langle C(f_x, f_y) \right\rangle_{|(f_x, f_y)| \approx q} \pr
 
 ```math
 P_p = c(100 - p) - \bar{z}, \qquad p \in \{50, 70, 90, 95\}, \qquad \text{razão } P_{90}/P_{70}
+```
+
+**Assimetria robusta (v3.5.0).** Com Q_p o p-ésimo percentil, a assimetria aparada usa só as alturas entre Q_t e Q_{100−t} (média z̄_t e RMS σ_t desse subconjunto), para t = 0,5 % e 2 %:
+
+```math
+S_{sk,\text{apar}\,t} = \frac{1}{\sigma_t^3}\,\frac{1}{N_t}\sum_{Q_t \le z_i \le Q_{100-t}} (z_i - \bar{z}_t)^3, \qquad S_{sk,\text{Bowley}} = \frac{Q_{75} + Q_{25} - 2\,Q_{50}}{Q_{75} - Q_{25}}
 ```
 
 **g-factor (Anexo B da DIN ISO 10844) e g-factor 3D.** Em cada segmento de 100 mm (perfil) ou trecho de 100 mm de células de 0,5 mm (superfície), com Mr em % contado a partir do ponto mais alto:

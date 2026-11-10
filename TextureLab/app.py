@@ -29,7 +29,7 @@ sys.path.insert(0, str(ROOT))
 from components.i18n import LANGUAGES, DEFAULT_LANGUAGE, set_language, t  # noqa: E402
 from components.project_reader import Project, ProjectError  # noqa: E402
 
-APP_VERSION = "3.4.2"
+APP_VERSION = "3.5.0"
 APP_AUTHOR = "Sergio Callai"
 APP_YEAR = "2026"
 SHOW_PCA = False        # PCA desativada por enquanto na vista Estatística; True para reativar
@@ -92,8 +92,9 @@ PARAM_GROUPS = {
     # g-factor 3D: análogo do Anexo B da DIN ISO 10844 sobre a superfície (núcleo 3.3.0, sem norma)
     "g3d": ["SF_g3D_pct", "SF_g3D_desvio", "SL5_g3D_pct", "SL5_g3D_desvio"],
 }
-_AREAL = ["Sa", "Sq", "Ssk", "Sku", "Sp", "Sv", "Sz", "Sdq", "Sdr_pct", "Sk", "Spk", "Svk", "Smr1", "Smr2",
-          "Vmp", "Vmc", "Vvc", "Vvv", "Sal", "Str", "P50", "P70", "P90", "P95", "P90_P70"]
+_AREAL = ["Sa", "Sq", "Ssk", "Ssk_trim05", "Ssk_trim2", "Ssk_bowley", "Sku", "Sp", "Sv", "Sz", "Sdq", "Sdr_pct",
+          "Sk", "Spk", "Svk", "Smr1", "Smr2", "Vmp", "Vmc", "Vvc", "Vvv", "Sal", "Str",
+          "P50", "P70", "P90", "P95", "P90_P70"]
 for _c in ("SF", "SL5", "MICRO"):
     PARAM_GROUPS[_c] = [f"{_c}_{p}" for p in _AREAL]
 
