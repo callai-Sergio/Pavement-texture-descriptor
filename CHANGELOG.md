@@ -1,5 +1,34 @@
 # TextureLab Changelog
 
+## [3.4.1] - 2026-10-27
+
+### Removed
+- **ML5 areal chain** (added in 3.4.0): it is redundant with SL5 (Ssk within 0.01, Sk within 0.001 mm), because the MICRO band is already inside SL5. Removed from the pipeline, viewer and exporter. Results computed with 3.4.0 still carry `ML5_*` columns; the viewer and exporter ignore them.
+
+### Changed
+- `tools/exportar_medianas.py` writes the Excel **in English** and adds an `All_data` sheet (one row per surface with every parameter and vector); the split sheets stay.
+- Version 3.4.1 in pyproject, pipeline, viewer and desktop wrapper.
+
+## [3.4.0] - 2026-10-26
+
+### Added
+- **Filter verification against the standards**: `tools/verificar_filtros.py` sends sine waves through the pipeline's own filter functions and compares the transmission with theory. It covers the ISO 16610-61 Gaussian (S 0.05 mm, L 0.5 mm, L 5 mm; 50 % at λc), SL5 = SF − G(SF), the ISO 13473-1 chain-A Butterworth low-pass (2.40 mm, forward-backward) and the ISO 13473-4 / IEC 61260-1 third-octave bands. All pass. Report and figure in `docs/verificacao_filtros/`, plus unit tests.
+- ML5 areal chain (F plane + L 5 mm, no S filter), later removed in 3.4.1.
+
+### Unchanged
+- All other descriptors are identical to 3.3.0 (checked on the 80 3dT files).
+
+## [3.3.0] - 2026-10-26
+
+### Added
+- **Radial 2D PSD and 2D Hurst** (descriptive, no standard) on SF: square tiles (2048 cells ≈ 22.5 mm, 2D Hann window, 50 % overlap), radial mean in 60 log bins, normalised so that sum(PSD)·df² = variance. `psd_radial.csv` per file; Hurst from the log-log slope PSD₂D ∝ q^-(2+2H) in the same micro/macro bands as the 1D Hurst: `H2D_micro`, `H2D_macro` (+ `_beta`, `_R2`).
+- **Height percentiles** P50/P70/P90/P95 (relative to the mean, from the Abbott curve) and the ratio **P90/P70** for SF, SL5 and MICRO.
+- **3D g-factor** (SF and SL5; an analogue of DIN ISO 10844 Annex B, no standard): surface averaged into 0.5 mm cells, 100 mm patches over the full width, Annex B in each patch, mean and std of the patches (`*_g3D_pct`, `*_g3D_desvio`, `*_g3D_n_trechos`). It runs above the profile g-factor, because each patch has ~85× more points and a deeper z_min.
+- **Excel exporter of medians** per surface (section + surface course): `tools/exportar_medianas.py <project>` reads a folder or `.tlproj` and writes areal (SL5, MICRO) and normative profile parameters plus vectors (L_tx per third octave, 1D and radial PSD on a common 60-point log λ grid, height PDF), with readable column names and units.
+
+### Known gaps
+- The viewer does not show the new 3.3.0 fields yet (percentiles, g3D, 2D Hurst, radial PSD); they are in the results and in the Excel export.
+
 ## [3.2.2] - 2026-10-22
 
 ### Changed
