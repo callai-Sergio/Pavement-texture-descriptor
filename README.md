@@ -39,7 +39,7 @@ streamlit run TextureLab/app.py        # then open Resultados_v3.4.1.tlproj or t
   PDF: [PT](docs/pdf/TextureLab_White_Paper_PT.pdf) · [EN](docs/pdf/TextureLab_White_Paper_EN.pdf)
   (regenerate with `python tools/md2pdf.py`)
 - Filter verification (ISO 16610-61, ISO 13473-1, ISO 13473-4 / IEC 61260-1): [docs/verificacao_filtros/VERIFICACAO_FILTROS.md](docs/verificacao_filtros/VERIFICACAO_FILTROS.md)
-- Excel of medians per surface: `python tools/exportar_medianas.py Resultados_v3.4.1` (needs `openpyxl`)
+- Excel of medians per surface: `python tools/exportar_medianas.py Resultados_v3.4.1` (runs in the pipeline venv; `openpyxl` is in `pipeline/requirements.txt`)
 - Diagnostics and corrections: [docs/DIAGNOSTICO.md](docs/DIAGNOSTICO.md)
 
 > The previous app, which computed with the v2.4.0 calculations (see the diagnostics), is kept as
