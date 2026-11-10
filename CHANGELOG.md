@@ -5,6 +5,10 @@
 ### Added
 - **Viewer shows the 3.3.0 fields**: P50/P70/P90/P95 and P90/P70 in the SF, SL5 and MICRO areal groups; new groups "Hurst 2D" (`H2D_*`, `D2D_superficie_*`) and "3D g-factor" (`SF/SL5_g3D_pct`, `_desvio`); radial 2D PSD chart with the server's 2D Hurst fit lines in the "PSD / Hurst" tab (EN/DE/PT). Older projects without these fields open as before.
 
+### Documentation
+- README rewritten for v3.4 (version history, filter report, Excel exporter); the legacy v2.x feature list is now labelled as such.
+- White paper EN/PT and PDFs updated to 3.4.1: new sections 3.7 radial 2D PSD and 2D Hurst, 3.8 3D g-factor, 3.9 wavelets; height percentiles; filter verification; ML5 note; new output files and summary fields; equations for the radial PSD, percentiles and (3D) g-factor; ETD references removed; DIN ISO 10844:2024-11 in the references.
+
 ### Unchanged
 - Calculation core stays 3.4.1, so existing results are not recomputed.
 

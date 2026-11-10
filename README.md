@@ -2,24 +2,33 @@
 
 A project to evaluate and analyze pavement textures via the **TextureLab** Streamlit application.
 
-## 🆕 v3.2.0 — Compute once on the server, view on the PC
+## 🆕 v3.4 — Compute once on the server, view on the PC
 
-There is now **one** calculation core, `pipeline/texturelab_batch.py` (v3.0.0 standards-checked
-core + memory optimizations + Hurst; v3.2.0 adds the g-factor per DIN ISO 10844:2024-11 Annex B
-and descriptive wavelet texture analysis, and drops ETD). It runs in batch on the server and writes a **project**
-(results folder or `.tlproj` zip: JSON/CSV/NPZ, no pickle). The Streamlit app `TextureLab/app.py`
-is a **viewer**: it opens the project and only renders tables, profiles, spectra, Abbott curves,
-PSD/Hurst, 3D surfaces, comparisons and PCA. Nothing is recalculated in the app.
+There is **one** calculation core, `pipeline/texturelab_batch.py` (core **3.4.1**). It runs in batch on the
+server and writes a **project** (results folder or `.tlproj` zip: JSON/CSV/NPZ, no pickle). The Streamlit app
+`TextureLab/app.py` (viewer **3.4.2**) opens the project and only renders tables, profiles, spectra, Abbott
+curves, PSD/Hurst, 3D surfaces and comparisons. Nothing is recalculated in the app.
+
+What the core computes, by version:
+- **3.0 / 3.1** — standards-checked core: MPD/MSD (ISO 13473-1), third-octave spectrum (ISO 13473-4), areal
+  S/V parameters on SF, SL5 and MICRO (ISO 25178, ISO 16610-61), Rk family (ISO 13565-2), 1D Hurst (descriptive).
+- **3.2** — g-factor per DIN ISO 10844:2024-11 Annex B; descriptive wavelet analysis (db4); ETD dropped (it is 1.1·MPD).
+- **3.3** — radial 2D PSD and 2D Hurst on SF; height percentiles P50/P70/P90/P95 and P90/P70; 3D g-factor;
+  Excel export of medians per surface (`tools/exportar_medianas.py`).
+- **3.4** — filter verification against the standards (`tools/verificar_filtros.py`,
+  [report](docs/verificacao_filtros/VERIFICACAO_FILTROS.md)); the short-lived ML5 chain was removed in 3.4.1.
+
+Full history in [CHANGELOG.md](CHANGELOG.md).
 
 ```bash
 # server: own venv + batch with CPU/RAM/disk limits (pause, resume, stop, status)
 pipeline/servidor.sh instalar
-pipeline/servidor.sh iniciar /path/LAZ /path/Resultados_v3
+pipeline/servidor.sh iniciar /path/LAZ /path/Resultados_v3.4.1
 pipeline/servidor.sh status
 # PC: own venv + viewer
 python -m venv .venv && .venv\Scripts\activate
 pip install -r TextureLab/requirements-viewer.txt
-streamlit run TextureLab/app.py        # then open Resultados_v3.2.tlproj or the folder
+streamlit run TextureLab/app.py        # then open Resultados_v3.4.1.tlproj or the folder
 ```
 
 - **View on the PC without the server:** `tools\baixar_resultados.bat` copies finished projects to
@@ -29,14 +38,18 @@ streamlit run TextureLab/app.py        # then open Resultados_v3.2.tlproj or the
 - White paper: [Português](docs/WHITE_PAPER_PT.md) · [English](docs/WHITE_PAPER_EN.md) ·
   PDF: [PT](docs/pdf/TextureLab_White_Paper_PT.pdf) · [EN](docs/pdf/TextureLab_White_Paper_EN.pdf)
   (regenerate with `python tools/md2pdf.py`)
+- Filter verification (ISO 16610-61, ISO 13473-1, ISO 13473-4 / IEC 61260-1): [docs/verificacao_filtros/VERIFICACAO_FILTROS.md](docs/verificacao_filtros/VERIFICACAO_FILTROS.md)
+- Excel of medians per surface: `python tools/exportar_medianas.py Resultados_v3.4.1` (needs `openpyxl`)
 - Diagnostics and corrections: [docs/DIAGNOSTICO.md](docs/DIAGNOSTICO.md)
 
 > The previous app, which computed with the v2.4.0 calculations (see the diagnostics), is kept as
-> `TextureLab/app_legacy.py` for reference only. The feature list below describes that legacy app.
+> `TextureLab/app_legacy.py` for reference only. **Everything below this line describes that legacy app**
+> (v2.x), not the current core and viewer: for example it still lists ETD, the Hampel filter and PCA, which
+> the current core does not use (PCA is hidden in the viewer).
 
-## 🔬 Features & Analysis Pipeline
+## 🔬 Legacy app (v2.x): features & analysis pipeline
 
-**TextureLab v3.0.0** provides a comprehensive pipeline for evaluating 3D pavement scans (LAZ/LAS/CSV/TXT) by extracting ISO-standard descriptors across multiple profiles:
+**TextureLab v2.x (legacy)** provides a comprehensive pipeline for evaluating 3D pavement scans (LAZ/LAS/CSV/TXT) by extracting ISO-standard descriptors across multiple profiles:
 
 1. **Preprocessing Pipeline**:
    - **Plane Removal:** Planar detrending or polynomial surface removal (enabled by default).
