@@ -409,13 +409,13 @@ STRINGS: dict[str, dict[str, str]] = {
 1. Copy the LAZ files to the server (folder `LAZ/`).
 2. On the server, run the batch with controlled resource use (CPU, RAM and disk limited; see `pipeline/README.md`):
 ```bash
-cd /data/callai/workspace/tyron/texturelab_repo/pipeline
-./servidor.sh iniciar /data/callai/workspace/tyron/LAZ /data/callai/workspace/tyron/Resultados_v3
+cd /data/callai/workspace/tyron/texturelab/pipeline
+./servidor.sh iniciar /data/callai/workspace/tyron/dados/LAZ /data/callai/workspace/tyron/dados/Resultados_v3.5
 ./servidor.sh status        # also: pausar (pause), continuar (resume), parar (stop), log
 ```
-3. Copy `Resultados_v3.tlproj` (or the folder `Resultados_v3`) to the PC, via `scp` or Nextcloud:
+3. Copy `Resultados_v3.5.tlproj` (or the folder `Resultados_v3.5`) to the PC, via `scp` or Nextcloud:
 ```bash
-scp sergio@137.226.169.235:/data/callai/workspace/tyron/Resultados_v3.tlproj .
+scp sergio@137.226.169.235:/data/callai/workspace/tyron/dados/Resultados_v3.5.tlproj .
 ```
 4. Open the `.tlproj` or the folder here.
 
@@ -428,13 +428,13 @@ Another configuration: `EXTRA="--config settings.json" ./servidor.sh iniciar LAZ
 1. LAZ-Dateien auf den Server kopieren (Ordner `LAZ/`).
 2. Auf dem Server den Stapellauf mit begrenzter Ressourcennutzung starten (CPU, RAM und Festplatte begrenzt; siehe `pipeline/README.md`):
 ```bash
-cd /data/callai/workspace/tyron/texturelab_repo/pipeline
-./servidor.sh iniciar /data/callai/workspace/tyron/LAZ /data/callai/workspace/tyron/Resultados_v3
+cd /data/callai/workspace/tyron/texturelab/pipeline
+./servidor.sh iniciar /data/callai/workspace/tyron/dados/LAZ /data/callai/workspace/tyron/dados/Resultados_v3.5
 ./servidor.sh status        # außerdem: pausar (pausieren), continuar (fortsetzen), parar (stoppen), log
 ```
-3. `Resultados_v3.tlproj` (oder den Ordner `Resultados_v3`) per `scp` oder Nextcloud auf den PC kopieren:
+3. `Resultados_v3.5.tlproj` (oder den Ordner `Resultados_v3.5`) per `scp` oder Nextcloud auf den PC kopieren:
 ```bash
-scp sergio@137.226.169.235:/data/callai/workspace/tyron/Resultados_v3.tlproj .
+scp sergio@137.226.169.235:/data/callai/workspace/tyron/dados/Resultados_v3.5.tlproj .
 ```
 4. Die `.tlproj`-Datei oder den Ordner hier öffnen.
 
@@ -447,13 +447,13 @@ Andere Konfiguration: `EXTRA="--config einstellungen.json" ./servidor.sh iniciar
 1. Copie os LAZ para o servidor (pasta `LAZ/`).
 2. No servidor, rode o lote com uso controlado (CPU, RAM e disco limitados; ver `pipeline/README.md`):
 ```bash
-cd /data/callai/workspace/tyron/texturelab_repo/pipeline
-./servidor.sh iniciar /data/callai/workspace/tyron/LAZ /data/callai/workspace/tyron/Resultados_v3
+cd /data/callai/workspace/tyron/texturelab/pipeline
+./servidor.sh iniciar /data/callai/workspace/tyron/dados/LAZ /data/callai/workspace/tyron/dados/Resultados_v3.5
 ./servidor.sh status        # também: pausar, continuar, parar, log
 ```
-3. Copie `Resultados_v3.tlproj` (ou a pasta `Resultados_v3`) para o PC, por `scp` ou Nextcloud:
+3. Copie `Resultados_v3.5.tlproj` (ou a pasta `Resultados_v3.5`) para o PC, por `scp` ou Nextcloud:
 ```bash
-scp sergio@137.226.169.235:/data/callai/workspace/tyron/Resultados_v3.tlproj .
+scp sergio@137.226.169.235:/data/callai/workspace/tyron/dados/Resultados_v3.5.tlproj .
 ```
 4. Abra aqui o `.tlproj` ou a pasta.
 

@@ -13,8 +13,8 @@ set -euo pipefail
 
 AQUI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TRABALHO="${TRABALHO:-/data/callai/workspace/tyron}"
-ENTRADA_PADRAO="${ENTRADA_PADRAO:-$TRABALHO/LAZ}"
-SAIDA_PADRAO="${SAIDA_PADRAO:-$TRABALHO/Resultados_v3}"
+ENTRADA_PADRAO="${ENTRADA_PADRAO:-$TRABALHO/dados/LAZ}"
+SAIDA_PADRAO="${SAIDA_PADRAO:-$TRABALHO/dados/Resultados_v3.5}"
 
 CPU_NUCLEOS="${CPU_NUCLEOS:-4}"        # teto de CPU (núcleos inteiros) e número de processos
 RAM_MAX="${RAM_MAX:-25G}"              # acima disso o sistema encerra só este cálculo
