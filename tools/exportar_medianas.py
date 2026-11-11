@@ -20,7 +20,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "TextureLab"))
 from components.project_reader import Project  # noqa: E402
 
 CHAINS = ["SL5", "MICRO"]
-AREAL = [("Ssk", "-", "Skewness (ISO 25178-2)"), ("Sku", "-", "Kurtosis (ISO 25178-2)"),
+AREAL = [("Ssk", "-", "Skewness (ISO 25178-2)"),
+         ("Ssk_trim05", "-", "Skewness without the 0.5 % extremes of each tail (descriptive)"),
+         ("Ssk_trim2", "-", "Skewness without the 2 % extremes of each tail (descriptive)"),
+         ("Ssk_bowley", "-", "Bowley quartile skewness (Q3 + Q1 - 2 Q2)/(Q3 - Q1) (descriptive)"),
+         ("Sku", "-", "Kurtosis (ISO 25178-2)"),
          ("Sk", "mm", "Core height (ISO 25178-2 / 13565-2)"), ("Spk", "mm", "Reduced peak height"),
          ("Svk", "mm", "Reduced valley depth"), ("Smr1", "%", "Upper material ratio of the core"),
          ("Smr2", "%", "Lower material ratio of the core"), ("Vvv", "mm", "Dale void volume (mm³/mm²)"),

@@ -2,11 +2,11 @@
 
 A project to evaluate and analyze pavement textures via the **TextureLab** Streamlit application.
 
-## 🆕 v3.4 — Compute once on the server, view on the PC
+## 🆕 v3.5 — Compute once on the server, view on the PC
 
-There is **one** calculation core, `pipeline/texturelab_batch.py` (core **3.4.1**). It runs in batch on the
+There is **one** calculation core, `pipeline/texturelab_batch.py` (core **3.5.0**). It runs in batch on the
 server and writes a **project** (results folder or `.tlproj` zip: JSON/CSV/NPZ, no pickle). The Streamlit app
-`TextureLab/app.py` (viewer **3.4.2**) opens the project and only renders tables, profiles, spectra, Abbott
+`TextureLab/app.py` (viewer **3.5.0**) opens the project and only renders tables, profiles, spectra, Abbott
 curves, PSD/Hurst, 3D surfaces and comparisons. Nothing is recalculated in the app.
 
 What the core computes, by version:
@@ -17,18 +17,19 @@ What the core computes, by version:
   Excel export of medians per surface (`tools/exportar_medianas.py`).
 - **3.4** — filter verification against the standards (`tools/verificar_filtros.py`,
   [report](docs/verificacao_filtros/VERIFICACAO_FILTROS.md)); the short-lived ML5 chain was removed in 3.4.1.
+- **3.5** — robust skewness next to Ssk: trimmed (0.5 % and 2 % per tail) and Bowley quartile skewness.
 
 Full history in [CHANGELOG.md](CHANGELOG.md).
 
 ```bash
 # server: own venv + batch with CPU/RAM/disk limits (pause, resume, stop, status)
 pipeline/servidor.sh instalar
-pipeline/servidor.sh iniciar /path/LAZ /path/Resultados_v3.4.1
+pipeline/servidor.sh iniciar /path/LAZ /path/Resultados_v3.5
 pipeline/servidor.sh status
 # PC: own venv + viewer
 python -m venv .venv && .venv\Scripts\activate
 pip install -r TextureLab/requirements-viewer.txt
-streamlit run TextureLab/app.py        # then open Resultados_v3.4.1.tlproj or the folder
+streamlit run TextureLab/app.py        # then open Resultados_v3.5.tlproj or the folder
 ```
 
 - **View on the PC without the server:** `tools\baixar_resultados.bat` copies finished projects to
@@ -39,7 +40,7 @@ streamlit run TextureLab/app.py        # then open Resultados_v3.4.1.tlproj or t
   PDF: [PT](docs/pdf/TextureLab_White_Paper_PT.pdf) · [EN](docs/pdf/TextureLab_White_Paper_EN.pdf)
   (regenerate with `python tools/md2pdf.py`)
 - Filter verification (ISO 16610-61, ISO 13473-1, ISO 13473-4 / IEC 61260-1): [docs/verificacao_filtros/VERIFICACAO_FILTROS.md](docs/verificacao_filtros/VERIFICACAO_FILTROS.md)
-- Excel of medians per surface: `python tools/exportar_medianas.py Resultados_v3.4.1` (runs in the pipeline venv; `openpyxl` is in `pipeline/requirements.txt`)
+- Excel of medians per surface: `python tools/exportar_medianas.py Resultados_v3.5` (runs in the pipeline venv; `openpyxl` is in `pipeline/requirements.txt`)
 - Diagnostics and corrections: [docs/DIAGNOSTICO.md](docs/DIAGNOSTICO.md)
 
 > The previous app, which computed with the v2.4.0 calculations (see the diagnostics), is kept as

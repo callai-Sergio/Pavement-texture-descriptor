@@ -46,6 +46,8 @@ Cadeias implementadas (todas sobre a grade em mm, eixo maior = sentido da via):
                                50 % de sobreposição), média radial em bins log; Hurst 3D pela inclinação
                                PSD_2D ∝ q^-(2+2H), faixas micro e macro como no Hurst 1D.
   P  Percentis e g 3D ........ P50/P70/P90/P95 das alturas (rel. à média) para SF, SL5 e MICRO.
+                               Assimetria robusta (3.5.0, descritivo): Ssk aparado em 0,5 % e 2 % por
+                               cauda (Ssk_trim05, Ssk_trim2) e Bowley dos quartis (Ssk_bowley).
                                g-factor 3D (SF e SL5; análogo do Anexo B da DIN ISO 10844, sem norma):
                                superfície em células de 0,5 mm (média, como a reamostragem da ISO 13473-1),
                                trechos de 100 mm na largura toda, Anexo B em cada trecho, média dos trechos.
@@ -95,7 +97,7 @@ import numpy as np
 import pandas as pd
 from scipy import ndimage, signal
 
-VERSION = "3.4.1"
+VERSION = "3.5.0"
 FORMAT_VERSION = 1              # formato do projeto (projeto.json / visualizacao.npz)
 
 _trapz = getattr(np, "trapezoid", None) or np.trapz   # numpy < 2.0
@@ -120,6 +122,7 @@ CFG = {
     "S_L_macro_mm": 5.0,
     "S_L_micro_mm": 0.5,
     "S_acf_threshold": 0.2,
+    "S_trim_pct": (0.5, 2.0),       # assimetria aparada: corta p % em cada cauda (descritivo)
     # Hurst / dimensão fractal (descritivo, não normativo)
     "H_nperseg_mm": 90.0,           # segmento de Welch (potência de 2 em amostras)
     "H_bands_mm": {"micro": (0.05, 0.5), "macro": (0.5, 20.0)},   # faixas de comprimento de onda
@@ -857,6 +860,22 @@ def height_percentiles(h: np.ndarray, curve) -> dict:
     return out
 
 
+def robust_skewness(h: np.ndarray, curve, trims) -> dict:
+    """Assimetria pouco sensível às caudas (descritivo, sem norma), ao lado do Ssk normativo:
+    Ssk_trimP = assimetria (3º momento) das alturas entre os percentis P e 100 − P (corta P % em cada
+    cauda); Ssk_bowley = (Q3 + Q1 − 2·Q2)/(Q3 − Q1), dos quartis. Percentis pela curva de Abbott."""
+    mr, c = curve
+    q = lambda p: float(np.interp(100.0 - p, mr, c))           # p-ésimo percentil
+    q1, q2, q3 = q(25.0), q(50.0), q(75.0)
+    out = {"Ssk_bowley": (q3 + q1 - 2.0 * q2) / (q3 - q1) if q3 > q1 else None}
+    for t in trims:
+        x = h[(h >= q(t)) & (h <= q(100.0 - t))].astype(np.float64)
+        x -= x.mean()
+        s2 = float(np.mean(x ** 2))
+        out[f"Ssk_trim{t:g}".replace(".", "")] = float(np.mean(x ** 3) / s2 ** 1.5) if s2 > 0 else 0.0
+    return out
+
+
 def g_factor_3d(S: np.ndarray, dx: float, cfg: dict) -> dict:
     """g-factor 3D, análogo (sem norma) do Anexo B da DIN ISO 10844 na mesma escala do perfil: média em
     células de A_resample_mm (0,5 mm), trechos de A_segment_mm (100 mm) ao longo da via com a largura
@@ -940,6 +959,7 @@ def areal_params(S: np.ndarray, dx: float, prefix: str, cfg: dict, acf: bool = T
     out.update(volume_params(h, curve=curve))
     if curve is not None:
         out.update(height_percentiles(h, curve))
+        out.update(robust_skewness(h, curve, cfg["S_trim_pct"]))
     if extras is not None and curve is not None:
         _view_curves(h, curve, prefix, cfg, extras)
     del h, curve

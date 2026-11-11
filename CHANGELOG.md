@@ -1,5 +1,14 @@
 # TextureLab Changelog
 
+## [3.5.0] - 2026-11-10
+
+### Added
+- **Robust skewness** (descriptive, no standard) for SF, SL5 and MICRO, next to the normative Ssk: `Ssk_trim05` and `Ssk_trim2` (third moment of the heights between the 0.5/99.5 % and 2/98 % percentiles, i.e. 0.5 % or 2 % cut from each tail) and `Ssk_bowley` = (Q3 + Q1 − 2·Q2)/(Q3 − Q1). Ssk is dominated by the tails: on A1_WB_MP1 (exposed aggregate concrete) SL5_Ssk goes from −0.80 to +0.26 when 0.5 % of each tail is cut (Bowley +0.18); on A1_MALA_MP1 (mastic asphalt) from −0.17 to −0.07 at 0.5 % and +0.03 at 2 % (Bowley +0.05). Percentiles come from the Abbott curve; configuration `S_trim_pct`.
+- Viewer areal groups and the Excel exporter include the three new fields. Unit tests with known answers (Bowley of the exponential distribution; trimmed skewness of a normal with 0.3 % deep valleys).
+
+### Changed
+- Calculation core 3.5.0: results need recomputing to get the new fields. Version 3.5.0 in pyproject, viewer and desktop wrapper.
+
 ## [3.4.2] - 2026-11-10
 
 ### Added
