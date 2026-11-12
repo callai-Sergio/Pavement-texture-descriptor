@@ -13,8 +13,8 @@ varreduras 3dT (LAZ). Núcleo conferido contra as normas ISO 13473-1:2019, 13473
 
 ```bash
 cd /data/callai/workspace/tyron
-git clone -b feature/server-compute https://github.com/callai-Sergio/Pavement-texture-descriptor.git texturelab_repo
-cd texturelab_repo/pipeline
+git clone https://github.com/callai-Sergio/Pavement-texture-descriptor.git texturelab
+cd texturelab/pipeline
 ./servidor.sh instalar          # venv próprio em pipeline/.venv, versões gravadas em .venv-versoes.txt
 loginctl enable-linger sergio   # o cálculo continua depois de sair do SSH
 ```
@@ -25,7 +25,7 @@ os números não mudam por atualização de biblioteca feita para outra coisa. P
 ### Calcular, com uso do servidor controlado
 
 ```bash
-./servidor.sh iniciar /data/callai/workspace/tyron/LAZ /data/callai/workspace/tyron/Resultados_v3
+./servidor.sh iniciar /data/callai/workspace/tyron/dados/LAZ /data/callai/workspace/tyron/dados/Resultados_v3.5
 ./servidor.sh status            # n/total, RAM e CPU em uso, estimativa de término, erros
 ./servidor.sh pausar            # congela (libera CPU); ./servidor.sh continuar retoma
 ./servidor.sh parar             # interrompe; iniciar de novo pula o que já terminou

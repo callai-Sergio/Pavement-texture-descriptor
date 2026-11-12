@@ -1,5 +1,15 @@
 # TextureLab Changelog
 
+## [Unreleased]
+
+### Added
+- `tools/exportar_superficies.py`: exports from a results folder one JSON (`texturelab-superficies` v1, ~5 MB for 16 surfaces) with the SL5 surface of one measurement per pavement (MPD closest to the median), the native profile, the chain-A profiles, the Abbott curves and histograms, and the official parameters. It is the only contact point with the standalone visual simulator, which no longer reads TextureLab result folders. Format in `docs/FORMATO_SUPERFICIES.md`; tests in `pipeline/tests/test_exportar_superficies.py`.
+
+### Changed
+- Working-folder layout on the server: LAZ and results live in `dados/` (`servidor.sh` defaults, help text of the viewer and `pipeline/README.md` updated); the repository checkout is `texturelab/`.
+- Old dated changelogs moved to `docs/historico/`, together with the 2026-11-10 summary of next steps (all done).
+- Calculation core unchanged (3.5.0): no recomputation needed.
+
 ## [3.5.0] - 2026-11-10
 
 ### Added
